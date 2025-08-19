@@ -8,5 +8,4 @@ a_temp
 scripts/
 
 *checkpoints/
-configs/
 .pre-commit-config.yaml
