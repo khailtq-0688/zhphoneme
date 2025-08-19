@@ -1,0 +1,12 @@
+*.pyc
+example*
+*.json
+data
+checkpoints
+a_temp
+.old
+scripts/
+
+*checkpoints/
+configs/
+.pre-commit-config.yaml
