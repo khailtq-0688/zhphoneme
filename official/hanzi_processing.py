@@ -1,5 +1,4 @@
 import re
-import json
 import warnings
 from hanzipy.decomposer import HanziDecomposer
 from pinyin_to_ipa import pinyin_to_ipa
@@ -14,16 +13,6 @@ except ImportError:
 # Tắt các cảnh báo không cần thiết từ pinyin-to-ipa
 warnings.filterwarnings('ignore', category=UserWarning, module='pinyin_to_ipa')
 
-
-# 1. Khởi tạo HanziDecomposer (từ hanzipy)
-try:
-    decomposer = HanziDecomposer()
-    print("Tải xong mô hình HanziDecomposer (tách bộ thủ)...")
-except Exception as e:
-    print(f"LỖI: Không thể khởi tạo HanziDecomposer: {e}")
-    print("Hãy đảm bảo bạn đã cài đặt hanzipy: pip install hanzipy")
-    exit()
-
 # 2. Định nghĩa một regex để chỉ xử lý Hán tự
 HANZI_REGEX = re.compile(u"[\u4e00-\u9fff]")
 
@@ -32,133 +21,168 @@ HANZI_REGEX = re.compile(u"[\u4e00-\u9fff]")
 # Chúng ta tìm 1 hoặc nhiều ký hiệu này ở cuối chuỗi
 TONE_REGEX = re.compile(r"([˥˧˩]+)$")
 
+consonants = [
+    "tsʰ", "tɕʰ", "tʰ", "ʈʂʰ", "tɕ", "ts", 
+    "ʈʂ", "kʰ", "pʰ", "ɕ", "f", "j", "k", 
+    "l",  "m", "n", "ŋ", "p", "ʐ", "s", "ʂ", 
+    "t", "w", "x"
+]
 
-# 4. ĐỊNH NGHĨA PIPELINE MỚI (XỬ LÝ THEO NGỮ CẢNH CÂU)
-def process_sentence(sentence: str) -> list:
-    """
-    Xử lý một câu Hán tự thô, chuyển mỗi ký tự thành một cấu trúc dữ liệu
-    bao gồm thông tin Ngữ âm (IPA) và Hình tự (Bộ thủ) ĐÃ ĐƯỢC THỐNG NHẤT.
-    """
-    pipeline_output = []
+glides = ["j", "w", "ɥ"]
 
-    try:
-        pinyin_list_of_lists = pinyin(sentence, style=Style.TONE3, heteronym=False)
-    except Exception as e:
-        print(f"Lỗi khi xử lý Pinyin cho câu: {e}")
-        return []
+vowels = [
+    "aɪ", "aʊ", "eɪ", "oʊ", "a", "ɑ", 
+    "ɛ", "e", "ə", "ɚ", "ɤ", "o", "i",
+    "ɻ̩", "ɹ̩", "u", "ʊ", "y",
+]
 
-    # Lọc ra danh sách Hán tự và Pinyin đã thống nhất
-    hanzi_chars = []
-    unified_pinyins = []
+off_glides = ["i̯", "u̯"]
 
-    for i, char in enumerate(sentence):
-        if HANZI_REGEX.match(char):
-            try:
-                hanzi_chars.append(char)
-                unified_pinyins.append(pinyin_list_of_lists[i][0])
-            except IndexError:
-                print(f"Lỗi không khớp Pinyin cho ký tự: {char}")
-                continue
+tones = [
+    "˧˩", "˩˧", "˧˩˧", "˧˥",
+    "˥˩", "˥", "˩", "˧", "˩"
+]
 
-    # --- Lặp qua danh sách ĐÃ THỐNG NHẤT Pinyin ---
-    for char, pinyin_str in zip(hanzi_chars, unified_pinyins):
+class HanziProcessor(HanziDecomposer):
+    def __init__(self):
+        super().__init__()
 
-        char_data = {
-            'hanzi': char,
-            'pinyin': pinyin_str,
-            'ipa_full': None,         
-            'ipa_components': None, 
-            'radicals': None
-        }
+    def process_IPA(self, pinyin_str: str, number_components: int = 3) -> tuple[bool, tuple[str]]:
+        ipa_variants = pinyin_to_ipa(pinyin_str)
 
-        # --- Luồng 1: Xử lý Ngữ âm (IPA) ---
+        if ipa_variants:
+            # *** THỐNG NHẤT IPA ***
+            # Luôn chọn cách phát âm đầu tiên (phổ biến nhất)
+            IPA = list(ipa_variants)[0] # (vd: ('x', 'au̯˧˩˧') hoặc ('ai̯˥˩',))
+            IPA = "".join(IPA)
+            original_IPA = IPA
+
+            initial = None
+            for consonant in consonants:
+                if IPA.startswith(consonant):
+                    initial = consonant
+                    IPA = IPA.removeprefix(initial)
+                    break
+
+            if initial == "j":
+                initial = None
+                medial = "j"
+            else:
+                medial = None
+                for glide in glides:
+                    if IPA.startswith(glide):
+                        medial = glide
+                        IPA = IPA.removeprefix(medial)
+                        break
+
+            nucleus = None
+            for vowel in vowels:
+                if IPA.startswith(vowel):
+                    nucleus = vowel
+                    IPA = IPA.removeprefix(nucleus)
+                    break
+
+            if nucleus is None:
+                print(f"{pinyin_str} does not include nucleus.")
+                return False, None
+            
+            off_medial = None
+            for off_glide in off_glides:
+                if IPA.startswith(off_glide):
+                    off_medial = off_glide
+                    IPA = IPA.removeprefix(off_medial)
+                    break
+            
+            tone = None
+            for _tone in tones:
+                if IPA.startswith(_tone):
+                    tone = _tone
+                    IPA = IPA.removeprefix(tone)
+                    break
+
+            if IPA == "":
+                final = None
+            else:
+                final = IPA
+
+            if number_components == 3:
+                rhyme = ""
+                if medial:
+                    rhyme += medial
+                rhyme += nucleus
+                if off_medial:
+                    rhyme += off_medial
+                if final:
+                    rhyme += final
+
+                return True, (original_IPA, (initial, rhyme, tone))
+            
+            assert number_components == 5, f"number_components must be 3 or 6, got number_components={number_components}."
+
+            # Lưu kết quả đã tách
+            return True, (original_IPA, (initial, medial, nucleus, off_medial, final, tone))
+        
+        else:
+            return False, None
+        
+    def replace_numbers(self, characters):
+        finalreview = []
+
+        for char in characters:
+            # if not char.isdigit():
+            finalreview.append(char)
+
+            # else:
+            #     finalreview.append("Here")
+
+        return finalreview
+
+    def process_radical(self, char: str) -> tuple[str]:
+        pass
+
+    # 4. ĐỊNH NGHĨA PIPELINE MỚI (XỬ LÝ THEO NGỮ CẢNH CÂU)
+    def process_sentence(self, sentence: str, number_components: int = 3) -> list:
+        """
+        Xử lý một câu Hán tự thô, chuyển mỗi ký tự thành một cấu trúc dữ liệu
+        bao gồm thông tin Ngữ âm (IPA) và Hình tự (Bộ thủ) ĐÃ ĐƯỢC THỐNG NHẤT.
+        """
+        characters = []
+
         try:
-            ipa_variants = pinyin_to_ipa(pinyin_str)
-            
-            if ipa_variants:
-                # *** THỐNG NHẤT IPA ***
-                # Luôn chọn cách phát âm đầu tiên (phổ biến nhất)
-                first_variant = list(ipa_variants)[0] # (vd: ('x', 'au̯˧˩˧') hoặc ('ai̯˥˩',))
-                
-                # Lưu lại chuỗi IPA đầy đủ
-                char_data['ipa_full'] = "".join(first_variant)
-
-                # *** TÁCH THÀNH PHẦN IPA *** 
-                ipa_onset = ""
-                rhyme_with_tone = ""
-
-                # Tách Onset
-                if len(first_variant) == 2:
-                    ipa_onset = first_variant[0]      # vd: 'x'
-                    rhyme_with_tone = first_variant[1]  # vd: 'au̯˧˩˧'
-                elif len(first_variant) == 1:
-                    ipa_onset = "" # (Zero onset)
-                    rhyme_with_tone = first_variant[0]  # vd: 'ai̯˥˩'
-                
-                # Tách Vần (Rhyme) và Thanh điệu (Tone)
-                ipa_rhyme = ""
-                ipa_tone = ""
-                
-                # Tách bằng Regex
-                split_rhyme = TONE_REGEX.split(rhyme_with_tone)
-                
-                if len(split_rhyme) == 3:
-                    # Regex tìm thấy thanh điệu
-                    # split_rhyme sẽ là ['au̯', '˧˩˧', '']
-                    ipa_rhyme = split_rhyme[0]
-                    ipa_tone = split_rhyme[1]
-                else:
-                    # Không tìm thấy thanh điệu (vd: thanh nhẹ)
-                    # split_rhyme sẽ là ['aŋ']
-                    ipa_rhyme = rhyme_with_tone
-                    ipa_tone = "" # (Không có thanh điệu)
-
-                # Lưu kết quả đã tách
-                char_data['ipa_components'] = {
-                    'onset': ipa_onset,
-                    'rhyme': ipa_rhyme,
-                    'tone': ipa_tone
-                }
-            
+            pinyin_list_of_lists = pinyin(sentence, style=Style.TONE3, heteronym=False)
         except Exception as e:
-            print(f"Lỗi khi xử lý IPA cho '{pinyin_str}': {e}")
+            print(f"Lỗi khi xử lý Pinyin cho câu: {e}")
+            return []
 
+        # Lọc ra danh sách Hán tự và Pinyin đã thống nhất
+        hanzi_chars = []
+        unified_pinyins = []
 
-        # --- Luồng 2: Xử lý Hình tự (Bộ thủ) ---
-        try:
-            decomposition_data = decomposer.decompose(char, 2)
-            
-            if decomposition_data and 'components' in decomposition_data:
-                char_data['radicals'] = decomposition_data['components']
-                
-        except Exception as e:
-            print(f"Lỗi khi tách bộ thủ cho '{char}': {e}")
+        for i, char in enumerate(sentence):
+            if HANZI_REGEX.match(char):
+                try:
+                    hanzi_chars.append(char)
+                    unified_pinyins.append(pinyin_list_of_lists[i][0])
+                except IndexError:
+                    print(f"Lỗi không khớp Pinyin cho ký tự: {char}")
+                    continue
 
-        pipeline_output.append(char_data)
+        # --- Lặp qua danh sách ĐÃ THỐNG NHẤT Pinyin ---
+        for char, pinyin_str in zip(hanzi_chars, unified_pinyins):
+            # --- Luồng 1: Xử lý Ngữ âm (IPA) ---
+            analytical, (ipa, ipa_components) = self.process_IPA(pinyin_str)
+            if not analytical:
+                raise Exception(f"Problem(s) occured while processing the character {char} ({pinyin})")
 
-    return pipeline_output
+            # --- Luồng 2: Xử lý Hình tự (Bộ thủ) ---
+            radicals = self.process_radical(char)
 
-# --- Ví dụ thực thi ---
-if __name__ == "__main__":
-    print("\n*** Chạy pipeline (phiên bản đã sửa - luôn thống nhất 1 IPA) ***")
+            characters.append({
+                'hanzi': char,
+                'pinyin': pinyin_str,       
+                "ipa": ipa,
+                'ipa_components': ipa_components,
+                'radicals': radicals,
+            })
 
-    # 1. Test chữ "好" trong một câu (trường hợp có ngữ cảnh)
-    test_sentence_1 = "你好" 
-    
-    print(f"\n--- Đang xử lý câu: '{test_sentence_1}' ---")
-    structured_data_1 = process_sentence(test_sentence_1)
-    print(json.dumps(structured_data_1, indent=2, ensure_ascii=False))
-
-    # 2. Test chữ "好" đứng một mình (trường hợp không có ngữ cảnh)
-    test_sentence_2 = "好" 
-
-    print(f"\n--- Đang xử lý câu (Hán tự đơn): '{test_sentence_2}' ---")
-    structured_data_2 = process_sentence(test_sentence_2)
-    print(json.dumps(structured_data_2, indent=2, ensure_ascii=False))
-
-    # 3. Test thêm với từ đa âm của "好" (hào) để kiểm tra
-    test_sentence_3 = "爱好" # "hào" (thanh 4)
-
-    print(f"\n--- Đang xử lý câu (Từ đa âm): '{test_sentence_3}' ---")
-    structured_data_3 = process_sentence(test_sentence_3)
-    print(json.dumps(structured_data_3, indent=2, ensure_ascii=False))
+        return characters
