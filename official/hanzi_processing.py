@@ -1,6 +1,7 @@
 import re
 import warnings
 from hanzipy.decomposer import HanziDecomposer
+import json
 from pinyin_to_ipa import pinyin_to_ipa
 
 try:
@@ -137,8 +138,22 @@ class HanziProcessor(HanziDecomposer):
 
         return finalreview
 
-    def process_radical(self, char: str) -> tuple[str]:
-        pass
+    def process_radical(self, char: str) -> tuple[str]:    
+        if char in self.radicals:
+            return [char]
+
+        if char not in self.characters:
+            return [char]
+
+
+        components = self.characters[char]['components']
+        
+        final_components = []
+        
+        for comp in components:
+            final_components.extend(self.process_radical(comp))
+        
+        return final_components
 
     # 4. ĐỊNH NGHĨA PIPELINE MỚI (XỬ LÝ THEO NGỮ CẢNH CÂU)
     def process_sentence(self, sentence: str, number_components: int = 3) -> list:
@@ -186,3 +201,23 @@ class HanziProcessor(HanziDecomposer):
             })
 
         return characters
+
+if __name__ == "__main__":
+    print("\n*** Chạy pipeline (phiên bản đã sửa - luôn thống nhất 1 IPA) ***")
+
+    # Khởi tạo bộ xử lý
+    processor = HanziProcessor()
+
+    # Danh sách các câu test
+    test_cases = [
+        ("你好", "Test chữ 好 trong câu có ngữ cảnh"),
+        ("好", "Test chữ 好 đứng một mình"),
+        ("爱好", "Test đa âm: hào (好) trong 爱好"),
+        ("界", "Test chữ 界 trong câu có ngữ cảnh"),
+    ]
+
+    for sentence, description in test_cases:
+        print(f"\n--- {description}: '{sentence}' ---")
+        result = processor.process_sentence(sentence)
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+
