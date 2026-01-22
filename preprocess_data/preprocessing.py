@@ -144,114 +144,87 @@ class PreprocessingData:
     def __init__(self, report_dir, output_dir):
         self.report_dir = report_dir
         self.output_dir = output_dir
-
-        # Các biến cấu hình sẽ được nạp từ file
         self.latin_map = {}
         self.symbol_map = {}
         self.punct_remove_set = set()
         
-        # Tạo thư mục output
         if not os.path.exists(self.output_dir):
             os.makedirs(self.output_dir)
 
-        # TỰ ĐỘNG NẠP CẤU HÌNH
         self._load_configurations()
+
+        # Regex để kiểm tra sót Latin
+        self.RE_CHECK_LATIN = re.compile(r'[a-zA-Z]')
 
     def _load_configurations(self):
         print("ĐANG NẠP CẤU HÌNH TỪ FILE JSON...")
-
-        # --- LOAD FILE 1: LATIN WORDS (JSON) ---
+        # Load Latin
         latin_path = os.path.join(self.report_dir, "1_latin_words.json")
         if os.path.exists(latin_path):
             try:
                 with open(latin_path, 'r', encoding='utf-8') as f:
-                    latin_data = json.load(f) # Đọc list các dict
-                
-                count_mapped = 0
+                    latin_data = json.load(f)
                 for item in latin_data:
                     word = str(item.get('word', '')).strip()
                     if not word: continue
-                    
-                    # Ưu tiên: Nếu trong JSON bạn đã thêm trường 'translation'
-                    # Ví dụ: {"word": "or", "translation": "或者", ...}
                     if 'translation' in item and item['translation']:
                         self.latin_map[word] = str(item['translation'])
-                        count_mapped += 1
-                
-                print(f"   [Latin] Đã nạp {len(latin_data)} từ. Có {count_mapped} từ có nghĩa để dịch.")
-            except Exception as e:
-                print(f"   [Latin] Lỗi đọc file JSON: {e}")
+                print(f"   [Latin] Đã nạp map cho {len(self.latin_map)} từ.")
+            except Exception as e: print(f"   [Latin] Lỗi: {e}")
     
-        # --- LOAD FILE 2: SYMBOLS & PUNCTUATION (JSON) ---
+        # Load Symbol
         symbol_path = os.path.join(self.report_dir, "2_symbols_punctuation.json")
         if os.path.exists(symbol_path):
             try:
                 with open(symbol_path, 'r', encoding='utf-8') as f:
                     symbol_data = json.load(f)
-                
                 for item in symbol_data:
                     char = str(item.get('character', ''))
                     if not char: continue
-                    
-                    # Logic phân loại tự động:
-                    # Nếu file JSON có ghi đè 'translation' (Người dùng tự sửa)
                     if 'translation' in item and item['translation']:
                          self.symbol_map[char] = item['translation']
-                    
-                    # Nếu file JSON có trường 'action': 'keep' -> Giữ lại (không xóa, không dịch)
-                    # Ví dụ: {"character": "...", "action": "keep"}
-                    elif item.get('action') == 'keep':
-                        continue 
-                    
-                    # CÒN LẠI -> Đưa vào danh sách XÓA
-                    else:
-                        self.punct_remove_set.add(char)
-                
-                print(f"   [Symbol] Sẽ dịch: {len(self.symbol_map)} ký tự ({list(self.symbol_map.keys())})")
-                print(f"   [Symbol] Sẽ xóa: {len(self.punct_remove_set)} ký tự")
-            except Exception as e:
-                print(f"   [Symbol] Lỗi đọc file JSON: {e}")
+                    elif item.get('action') == 'keep': continue 
+                    else: self.punct_remove_set.add(char)
+                print(f"   [Symbol] Dịch: {len(self.symbol_map)}, Xóa: {len(self.punct_remove_set)}")
+            except Exception as e: print(f"   [Symbol] Lỗi: {e}")
 
-    def process_row(self, row, logs):
+    def process_row(self, row, row_logs):
+        """
+        Xử lý 1 dòng. 
+        row_logs là list tạm thời chỉ cho dòng này.
+        """
         text = row.get('sentence', '')
         label_id = row.get('label', 'unknown')
         
-        # 1. XỬ LÝ SỐ (Luôn chạy cn2an)
-        # Regex tìm số
-        text = re.sub(r'\d+(?:\.\d+)?', lambda x: self._convert_num(x, label_id, logs), text)
+        # 1. SỐ
+        text = re.sub(r'\d+(?:\.\d+)?', lambda x: self._convert_num(x, label_id, row_logs), text)
 
-        # 2. XỬ LÝ LATIN (Dựa trên Map đã load)
-        # Regex tìm từ tiếng Anh
-        def replace_latin(match):
+        # 2. LATIN 
+        def replace_latin(match): #dịch nếu có trong map (trường "translation")
             word = match.group()
             if word in self.latin_map:
                 converted = self.latin_map[word]
-                logs.append({"label": label_id, "type": "LATIN", "original": word, "converted": converted})
+                row_logs.append({"label": label_id, "type": "LATIN", "original": word, "converted": converted})
                 return converted
-            return word # Không biết dịch thì giữ nguyên
+            return word # Giữ nguyên nếu chưa biết dịch
         
         text = re.sub(r'[a-zA-Z]+', replace_latin, text)
 
-        # 3. XỬ LÝ SYMBOL (Dựa trên Map và Remove Set đã load)
+        # 3. SYMBOL
         final_chars = []
         for char in text:
-            # Nếu ký tự cần DỊCH
             if char in self.symbol_map:
                 converted = self.symbol_map[char]
-                logs.append({"label": label_id, "type": "SYMBOL_MAPPED", "original": char, "converted": converted})
+                row_logs.append({"label": label_id, "type": "SYMBOL_MAPPED", "original": char, "converted": converted})
                 final_chars.append(converted)
-            
-            # Nếu ký tự cần XÓA
             elif char in self.punct_remove_set:
-                logs.append({"label": label_id, "type": "REMOVED", "original": char, "converted": ""})
+                row_logs.append({"label": label_id, "type": "REMOVED", "original": char, "converted": ""})
                 continue 
-            
-            # Giữ lại (Chữ Hán, khoảng trắng, hoặc latin chưa xử lý)
             else:
                 final_chars.append(char)
         
         return "".join(final_chars)
-
+    
     def _convert_num(self, match, label_id, logs):
         val = match.group()
         try:
@@ -262,35 +235,53 @@ class PreprocessingData:
             return val
 
     def run_process(self, input_file, output):
-        print("\nXỬ LÝ DỮ LIỆU...")
+        print("\nXỬ LÝ DỮ LIỆU (VÀ LỌC LATIN)...")
         clean_data = []
-        logs = []
+        all_logs = [] # Log tổng hợp
+        
+        dropped_count = 0
+        total_count = 0
         
         with open(input_file, 'r', encoding='utf-8') as f_in:
             for row in f_in:
                 row = row.strip()
-                if not row:
-                    continue
+                if not row: continue
+                
+                total_count += 1
+                item = json.loads(row)
+                
+                # Tạo log tạm thời cho dòng này
+                current_row_logs = []
+                
+                # Xử lý văn bản
+                new_sentence = self.process_row(item, current_row_logs)
+                
+                # Nếu câu mới vẫn còn chứa ký tự a-z hoặc A-Z -> Loại bỏ
+                if self.RE_CHECK_LATIN.search(new_sentence):
+                    dropped_count += 1
+                    # Không lưu item vào clean_data
+                    # Không cộng current_row_logs vào all_logs
+                    continue 
 
-                item = json.loads(row)  # chuyển thành dict chuẩn
-        
-                new_sentence = self.process_row(item, logs)
+                # Nếu sạch -> Lưu lại
                 new_row = item.copy()
                 new_row['sentence'] = new_sentence
                 clean_data.append(new_row)
+                all_logs.extend(current_row_logs)
             
-        # Xuất file
-        self._save_files(clean_data, logs, output)
+        print(f"Tổng số câu: {total_count}")
+        print(f"Số câu bị loại bỏ: {dropped_count}")
+        print(f"Số câu hợp lệ giữ lại: {len(clean_data)}")
 
+        # Xuất file
+        self._save_files(clean_data, all_logs, output)
+        
     def _save_files(self, data, logs, output):
-        # File data sạch
-        out_path = os.path.join(self.output_dir, f"processed_{output}.json")
-        with open(out_path, 'w', encoding='utf-8') as f:
-            for item in data:
-                f.write(json.dumps(item, ensure_ascii=False) + "\n")
-        
-        # File log
-        log_path = os.path.join(self.output_dir, f"process_{output}_log.csv")
-        pd.DataFrame(logs).to_csv(log_path, index=False, encoding='utf-8-sig')
-        
-        print(f"Hoàn tất! File lưu tại: {self.output_dir}")
+            out_path = os.path.join(self.output_dir, f"processed_{output}.json")
+            with open(out_path, 'w', encoding='utf-8') as f:
+                for item in data:
+                    f.write(json.dumps(item, ensure_ascii=False) + "\n")
+            
+            log_path = os.path.join(self.output_dir, f"process_{output}_log.csv")
+            pd.DataFrame(logs).to_csv(log_path, index=False, encoding='utf-8-sig')
+            print(f"Hoàn tất! File lưu tại: {self.output_dir}")
