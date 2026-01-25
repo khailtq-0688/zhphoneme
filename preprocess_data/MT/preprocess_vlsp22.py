@@ -16,13 +16,14 @@ except ImportError:
 
 HANZI_RANGE = r'\u4e00-\u9fff'
 
+# Các dấu lưu ý sau: - — / \
 SYMBOL_MAP = {
     # '-': '至',  
     '&': '和'   
 }
 
 # Regex giữ lại Hán tự, Alpha, Số, và các dấu câu đặc biệt (/ %)
-CLEANING_REGEX_PATTERN = f'[^{HANZI_RANGE}a-zA-Z0-9%/]' 
+CLEANING_REGEX_PATTERN = f'[^{HANZI_RANGE}a-zA-Z0-9%/\-—]' 
 CLEANING_REGEX = re.compile(CLEANING_REGEX_PATTERN)
 
 REJECT_DIGIT_REGEX = re.compile(r'\d') 
@@ -93,9 +94,7 @@ if __name__ == "__main__":
     out_report    = os.path.join(output_dir, 'train2022_report.json')
 
     print(f"🚀 Bắt đầu xử lý cặp file: {input_src} - {input_tgt}")
-    print(f"   - Logic: Giữ 'target', Filter No-Hanzi, Map Symbols, Clean Regex.")
-    print(f"   - Mới: Đã thêm bước chuẩn hóa Unicode (NFKC).")
-    print(f"   - Chế độ: Đồng bộ dòng (Sync Lines).")
+    print(f"   - Chế độ: Đồng bộ dòng.")
     print(f"   - Output Folder: {output_dir}/")
 
     stats = {
