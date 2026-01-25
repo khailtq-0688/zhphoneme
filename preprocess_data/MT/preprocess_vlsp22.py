@@ -2,6 +2,7 @@ import re
 import json
 import os
 import sys
+import unicodedata  # Thư viện để chuẩn hóa Unicode
 from tqdm import tqdm
 from collections import Counter
 
@@ -15,7 +16,6 @@ except ImportError:
 
 HANZI_RANGE = r'\u4e00-\u9fff'
 
-# Mapping dựa trên logic đã thống nhất: '-' là '至' (đến), '&' là '和'
 SYMBOL_MAP = {
     # '-': '至',  
     '&': '和'   
@@ -27,7 +27,13 @@ CLEANING_REGEX = re.compile(CLEANING_REGEX_PATTERN)
 
 REJECT_DIGIT_REGEX = re.compile(r'\d') 
 
-
+# Hàm chuẩn hóa Unicode
+def normalize_text(text: str) -> str:
+    """
+    Chuẩn hóa Unicode (NFKC) để xử lý các ký tự Compatibility (Hán tự dị thể).
+    Ví dụ: 數 -> 数, １ -> 1, Ａ -> A
+    """
+    return unicodedata.normalize('NFKC', text)
 
 def translate_symbols(text: str) -> str:
     """
@@ -71,7 +77,6 @@ def contains_hanzi(text: str) -> bool:
 
 
 if __name__ == "__main__":
-    # Input files
     input_src = 'train2022.zh'
     input_tgt = 'train2022.vi'
     output_dir = 'output_train'
@@ -89,6 +94,7 @@ if __name__ == "__main__":
 
     print(f"🚀 Bắt đầu xử lý cặp file: {input_src} - {input_tgt}")
     print(f"   - Logic: Giữ 'target', Filter No-Hanzi, Map Symbols, Clean Regex.")
+    print(f"   - Mới: Đã thêm bước chuẩn hóa Unicode (NFKC).")
     print(f"   - Chế độ: Đồng bộ dòng (Sync Lines).")
     print(f"   - Output Folder: {output_dir}/")
 
@@ -116,7 +122,11 @@ if __name__ == "__main__":
                 if not original_src:
                     continue
 
-                processed_text = translate_symbols(original_src)
+                # Chuẩn hóa Unicode trước tiên
+                # Biến các ký tự dị thể (như 數) thành ký tự chuẩn (数)
+                processed_text = normalize_text(original_src)
+
+                processed_text = translate_symbols(processed_text)
                 processed_text = convert_numbers_and_percent(processed_text)
                 processed_text, removed_chars = clean_text(processed_text)
                 
