@@ -22,17 +22,27 @@ SYMBOL_MAP = {
     '&': '和'   
 }
 
-# Regex giữ lại Hán tự, Alpha, Số, và các dấu câu đặc biệt (/ %)
+# Regex giữ lại Hán tự, Alpha, Số, và các dấu câu đặc biệt 
 CLEANING_REGEX_PATTERN = f'[^{HANZI_RANGE}a-zA-Z0-9%/\-—]' 
 CLEANING_REGEX = re.compile(CLEANING_REGEX_PATTERN)
 
 REJECT_DIGIT_REGEX = re.compile(r'\d') 
 
+# --- Hàm xóa gạch đầu dòng ---
+def remove_leading_hyphen(text: str) -> str:
+    """
+    Xóa dấu gạch ngang (-) xuất hiện ở đầu câu (dạng gạch đầu dòng/hội thoại).
+    Ví dụ: 
+      '-工程师' -> '工程师'
+      '- 对' -> '对'
+    """
+    return re.sub(r'^\s*-\s*', '', text)
+
 # Hàm chuẩn hóa Unicode
 def normalize_text(text: str) -> str:
     """
     Chuẩn hóa Unicode (NFKC) để xử lý các ký tự Compatibility (Hán tự dị thể).
-    Ví dụ: 數 -> 数, １ -> 1, Ａ -> A
+    Ví dụ: 數 -> 数, １ -> 1, Ａ -> A
     """
     return unicodedata.normalize('NFKC', text)
 
@@ -41,6 +51,7 @@ def translate_symbols(text: str) -> str:
     Xử lý dấu gạch ngang nối số (1995-2005 -> 1995至2005)
     Và mapping các ký tự đặc biệt khác.
     """
+    # Chỉ thay thế dấu gạch ngang NẰM GIỮA 2 số
     text = re.sub(r'(\d)-(\d)', r'\1至\2', text)
 
     for symbol, hanzi in SYMBOL_MAP.items():
@@ -94,6 +105,7 @@ if __name__ == "__main__":
     out_report    = os.path.join(output_dir, 'train2022_report.json')
 
     print(f"🚀 Bắt đầu xử lý cặp file: {input_src} - {input_tgt}")
+    print(f"   - Logic Mới: Xóa dấu gạch đầu dòng (-).")
     print(f"   - Chế độ: Đồng bộ dòng.")
     print(f"   - Output Folder: {output_dir}/")
 
@@ -121,10 +133,16 @@ if __name__ == "__main__":
                 if not original_src:
                     continue
 
-                # Chuẩn hóa Unicode trước tiên
-                # Biến các ký tự dị thể (như 數) thành ký tự chuẩn (数)
+                # --- PIPELINE XỬ LÝ ---
+                
+                # 1. Chuẩn hóa Unicode
                 processed_text = normalize_text(original_src)
 
+                # 2. [MỚI] Xóa gạch đầu dòng ngay sau khi chuẩn hóa
+                # Để tránh ảnh hưởng đến logic xử lý số (1990-2000) ở sau
+                processed_text = remove_leading_hyphen(processed_text)
+
+                # 3. Các bước xử lý tiếp theo
                 processed_text = translate_symbols(processed_text)
                 processed_text = convert_numbers_and_percent(processed_text)
                 processed_text, removed_chars = clean_text(processed_text)
