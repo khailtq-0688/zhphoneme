@@ -16,14 +16,14 @@ except ImportError:
 
 HANZI_RANGE = r'\u4e00-\u9fff'
 
-# Các dấu lưu ý sau: - — / \
+# Các dấu lưu ý sau: - — /
 SYMBOL_MAP = {
     # '-': '至',  
     '&': '和'   
 }
 
 # Regex giữ lại Hán tự, Alpha, Số, và các dấu câu đặc biệt 
-CLEANING_REGEX_PATTERN = f'[^{HANZI_RANGE}a-zA-Z0-9%/\-—]' 
+CLEANING_REGEX_PATTERN = f'[^{HANZI_RANGE}a-zA-Z0-9%/-—]' 
 CLEANING_REGEX = re.compile(CLEANING_REGEX_PATTERN)
 
 REJECT_DIGIT_REGEX = re.compile(r'\d') 
