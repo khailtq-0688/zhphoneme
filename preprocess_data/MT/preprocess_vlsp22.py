@@ -23,7 +23,7 @@ SYMBOL_MAP = {
 }
 
 # Regex giữ lại Hán tự, Alpha, Số, và các dấu câu đặc biệt 
-CLEANING_REGEX_PATTERN = f'[^{HANZI_RANGE}a-zA-Z0-9%/-—]' 
+CLEANING_REGEX_PATTERN = f'[^-{HANZI_RANGE}a-zA-Z0-9%/—]'
 CLEANING_REGEX = re.compile(CLEANING_REGEX_PATTERN)
 
 REJECT_DIGIT_REGEX = re.compile(r'\d') 
@@ -52,7 +52,7 @@ def translate_symbols(text: str) -> str:
     Và mapping các ký tự đặc biệt khác.
     """
     # Chỉ thay thế dấu gạch ngang NẰM GIỮA 2 số
-    text = re.sub(r'(\d)-(\d)', r'\1至\2', text)
+    # text = re.sub(r'(\d)-(\d)', r'\1至\2', text)
 
     for symbol, hanzi in SYMBOL_MAP.items():
         if symbol in text:
