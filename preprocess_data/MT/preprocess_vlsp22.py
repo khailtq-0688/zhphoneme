@@ -2,7 +2,7 @@ import re
 import json
 import os
 import sys
-import unicodedata  # Thư viện để chuẩn hóa Unicode
+import unicodedata  
 from tqdm import tqdm
 from collections import Counter
 
@@ -15,18 +15,21 @@ except ImportError:
     sys.exit(1)
 
 HANZI_RANGE = r'\u4e00-\u9fff'
-
-# Các dấu lưu ý sau: - — /
-SYMBOL_MAP = {
-    # '-': '至',  
+SYMBOL_MAP = { 
     '&': '和'   
 }
 
-# Regex giữ lại Hán tự, Alpha, Số, và các dấu câu đặc biệt 
-CLEANING_REGEX_PATTERN = f'[^-{HANZI_RANGE}a-zA-Z0-9%/—]'
+CLEANING_REGEX_PATTERN = f'[^-{HANZI_RANGE}a-zA-Z0-9%/]'
 CLEANING_REGEX = re.compile(CLEANING_REGEX_PATTERN)
 
 REJECT_DIGIT_REGEX = re.compile(r'\d') 
+
+URL_OR_PATH_REGEX = re.compile(
+    r'(https?://\S+)|'           # URL chuẩn
+    r'(www\.\S+)|'               # www.
+    r'(\S+://\S+)|'              # Các dạng schema: 协议://
+    r'(?<![a-zA-Z0-9])\b([a-zA-Z._-][a-zA-Z0-9._-]*\/){2,}[a-zA-Z0-9._-]*'
+)
 
 # --- Hàm xóa gạch đầu dòng ---
 def remove_leading_hyphen(text: str) -> str:
@@ -51,24 +54,36 @@ def translate_symbols(text: str) -> str:
     Xử lý dấu gạch ngang nối số (1995-2005 -> 1995至2005)
     Và mapping các ký tự đặc biệt khác.
     """
-    # Chỉ thay thế dấu gạch ngang NẰM GIỮA 2 số
-    # text = re.sub(r'(\d)-(\d)', r'\1至\2', text)
-
     for symbol, hanzi in SYMBOL_MAP.items():
         if symbol in text:
             text = text.replace(symbol, hanzi)
     return text
 
+def translate_emdash_range(text: str) -> str:
+    """
+    Dịch dấu gạch ngang thành '至' (đến) khi nằm giữa 2 thực thể số.
+    Xử lý được: 10-20, 八—十四, 38C—39C, 百分之十—百分之三十...
+    """
+    # Tập hợp các ký tự thuộc về số (Ả Rập + Hán tự số + các thành phần bổ trợ)
+    num_chars = r'0-9零一二三四五六七八九十百千万亿点'
+    
+    # Regex bắt: [Số+Đơn vị?] + [Dấu gạch] + [Số]
+    # Hỗ trợ (chưa) cả dấu gạch đơn (-) và gạch đôi (——)
+    # range_pattern = rf'((?:百分之)?[{num_chars}]+[a-zA-Z°℃%]*)\s*[-—]+\s*((?:百分之)?[{num_chars}]+)'
+    range_pattern = rf'((?:百分之)?[{num_chars}]+[a-zA-Z°℃%]*)\s*[—]+\s*((?:百分之)?[{num_chars}]+)'
+    
+    return re.sub(range_pattern, r'\1至\2', text)
+
 def convert_numbers_and_percent(text: str) -> str:
-    """
-    Chuyển đổi số VÀ phần trăm sang chữ Hán.
-    Sử dụng cn2an với mode 'an2cn'.
-    """
-    try:
-        # cn2an xử lý cả số thập phân, phần trăm, v.v.
-        return cn2an.transform(text, "an2cn")
-    except ValueError:
-        return text
+    """Chuyển đổi các cụm số trong câu sang Hán tự"""
+    def callback(match):
+        val = match.group()
+        try:
+            return cn2an.transform(val, "an2cn")
+        except:
+            return val
+    # Bắt các cụm số nguyên, thập phân và phần trăm
+    return re.sub(r'\d+(?:\.\d+)?%?', callback, text)
 
 def clean_text(text: str) -> tuple:
     """
@@ -133,16 +148,17 @@ if __name__ == "__main__":
                 if not original_src:
                     continue
 
-                # --- PIPELINE XỬ LÝ ---
-                
-                # 1. Chuẩn hóa Unicode
+                if URL_OR_PATH_REGEX.search(original_src) or URL_OR_PATH_REGEX.search(original_tgt):
+                    status = "HAS_URL_OR_PATH"
+                    stats["rejected"] += 1
+                    stats["reasons"][status] = stats["reasons"].get(status, 0) + 1
+                    f_reject.write(f"[{status}] ZH: {original_src} | VI: {original_tgt}\n")
+                    continue 
+
+
                 processed_text = normalize_text(original_src)
-
-                # 2. [MỚI] Xóa gạch đầu dòng ngay sau khi chuẩn hóa
-                # Để tránh ảnh hưởng đến logic xử lý số (1990-2000) ở sau
                 processed_text = remove_leading_hyphen(processed_text)
-
-                # 3. Các bước xử lý tiếp theo
+                processed_text = translate_emdash_range(processed_text)
                 processed_text = translate_symbols(processed_text)
                 processed_text = convert_numbers_and_percent(processed_text)
                 processed_text, removed_chars = clean_text(processed_text)
