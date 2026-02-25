@@ -16,10 +16,14 @@ except ImportError:
 
 HANZI_RANGE = r'\u4e00-\u9fff'
 SYMBOL_MAP = { 
-    '&': '和'   
+    '&': '和',
+    '+': '加',
+    '/': '每',  # Fallback cho các dấu / còn sót lại
+    '=': '等于',
 }
 
-CLEANING_REGEX_PATTERN = f'[^-{HANZI_RANGE}a-zA-Z0-9%/]'
+# CLEANING_REGEX_PATTERN = f'[^-{HANZI_RANGE}a-zA-Z0-9%/]'
+CLEANING_REGEX_PATTERN = f'[^{HANZI_RANGE}a-zA-Z0-9%/]'
 CLEANING_REGEX = re.compile(CLEANING_REGEX_PATTERN)
 
 REJECT_DIGIT_REGEX = re.compile(r'\d') 
@@ -59,20 +63,62 @@ def translate_symbols(text: str) -> str:
             text = text.replace(symbol, hanzi)
     return text
 
+def normalize_date_format(text: str) -> str:
+    """
+    Chuyển đổi định dạng ngày YYYY-MM-DD sang YYYY年MM月DD日.
+    Ví dụ: 2016-12-14 -> 2016年12月14日
+    """
+    # Regex bắt định dạng: 4 số - 1~2 số - 1~2 số
+    # Group 1: Năm, Group 2: Tháng, Group 3: Ngày
+    date_pattern = r'(\d{4})\s*[-/]\s*(\d{1,2})\s*[-/]\s*(\d{1,2})'
+    
+    return re.sub(date_pattern, r'\1年\2月\3日', text)
+
 def translate_emdash_range(text: str) -> str:
     """
-    Dịch dấu gạch ngang thành '至' (đến) khi nằm giữa 2 thực thể số.
-    Xử lý được: 10-20, 八—十四, 38C—39C, 百分之十—百分之三十...
+    Biến đổi các mẫu 'Số - Số' thành 'Số 至 Số'.
+    Hỗ trợ:
+    - Gạch: -, –, —
+    - Số: 0-9, Hán tự số
+    - Đơn vị: %, độ C, và cả THỜI GIAN (Năm, Tháng, Ngày, Giờ)
     """
-    # Tập hợp các ký tự thuộc về số (Ả Rập + Hán tự số + các thành phần bổ trợ)
-    num_chars = r'0-9零一二三四五六七八九十百千万亿点'
     
-    # Regex bắt: [Số+Đơn vị?] + [Dấu gạch] + [Số]
-    # Hỗ trợ (chưa) cả dấu gạch đơn (-) và gạch đôi (——)
-    # range_pattern = rf'((?:百分之)?[{num_chars}]+[a-zA-Z°℃%]*)\s*[-—]+\s*((?:百分之)?[{num_chars}]+)'
-    range_pattern = rf'((?:百分之)?[{num_chars}]+[a-zA-Z°℃%]*)\s*[—]+\s*((?:百分之)?[{num_chars}]+)'
+    # 1. Nhóm ký tự số (giữ nguyên)
+    num_chars = r'[0-9零一二三四五六七八九十百千万亿\.]'
     
-    return re.sub(range_pattern, r'\1至\2', text)
+    # 2. Nhóm đơn vị (CẬP NHẬT MỚI)
+    # Thêm: 年(năm), 月(tháng), 日(ngày), 号(ngày), 点(giờ), 时(giờ)
+    # [a-zA-Z°℃%]* : Bắt các đơn vị Latin/Ký hiệu (kg, m, %, C...)
+    units = r'[a-zA-Z°℃%年月日号点时]*'
+    
+    # 3. Regex Pattern
+    # Cấu trúc: (Số + Đơn vị) + [Gạch] + (Số + Đơn vị)
+    pattern = rf'({num_chars}+{units})\s*[-–—]+\s*({num_chars}+{units})'
+    
+    # 4. Thay thế bằng chữ 至 (đến)
+    return re.sub(pattern, r'\1至\2', text)
+
+def translate_slash_context(text: str) -> str:
+    """
+    Xử lý dấu '/' dựa trên ngữ cảnh:
+    1. Đơn vị (km/h) -> 每 (mỗi/per)
+    2. Tỷ số (1/500) -> 比 (tỷ/trên)
+    """
+    
+    # 1. Xử lý Đơn vị đo lường (Unit per Unit)
+    # Bắt các cặp: (Ký tự Latin/Tiền tệ) + / + (Ký tự Latin/Đơn vị đo)
+    # Ví dụ: km/h -> km每h, USD/桶 -> USD每桶
+    # (?i) là flag ignore case
+    unit_pattern = r'(?i)([a-z%°℃元盾]+)\s*/\s*([a-z%°℃]+|桶|公升|人|月|年)'
+    text = re.sub(unit_pattern, r'\1每\2', text)
+
+    # 2. Xử lý Tỷ số dạng Số/Số (1/500, 3/4)
+    # Lưu ý: Ngày tháng dạng 2016/12/14 đã bị hàm normalize_date_format xử lý trước đó rồi
+    # nên ở đây chỉ còn lại các tỷ số hoặc khoảng năm (2011/2012)
+    ratio_pattern = r'(\d+)\s*/\s*(\d+)'
+    text = re.sub(ratio_pattern, r'\1比\2', text)
+    
+    return text
 
 def convert_numbers_and_percent(text: str) -> str:
     """Chuyển đổi các cụm số trong câu sang Hán tự"""
@@ -158,7 +204,9 @@ if __name__ == "__main__":
 
                 processed_text = normalize_text(original_src)
                 processed_text = remove_leading_hyphen(processed_text)
+                processed_text = normalize_date_format(processed_text)
                 processed_text = translate_emdash_range(processed_text)
+                processed_text = translate_slash_context(processed_text)
                 processed_text = translate_symbols(processed_text)
                 processed_text = convert_numbers_and_percent(processed_text)
                 processed_text, removed_chars = clean_text(processed_text)
