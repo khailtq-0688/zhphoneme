@@ -27,7 +27,7 @@ consonants = [
     "tsʰ", "tɕʰ", "tʰ", "ʈʂʰ", "tɕ", "ts", 
     "ʈʂ", "kʰ", "pʰ", "ɕ", "f", "j", "k", 
     "l",  "m", "n", "ŋ", "p", "ʐ", "s", "ʂ", 
-    "t", "w", "x", "ɻ", "ɹ"
+    "t", "w", "x", "ɻ", "ɹ", "h"
 ]
 
 glides = ["j", "w", "ɥ"]
@@ -85,11 +85,23 @@ class HanziProcessor(HanziDecomposer):
                     break
 
             if nucleus is None:
-                # Nếu initial là phụ âm mũi (n, m, ŋ) và phần còn lại chỉ chứa thanh điệu
-                # => Đẩy initial sang làm nucleus (âm tiết chính)
-                if initial in ['m', 'n', 'ŋ'] and (IPA == "" or any(IPA.startswith(t) for t in tones)):
+                # Kiểm tra trường hợp phụ âm mũi (m, n, ŋ) đóng vai trò hạt nhân đứng sau một phụ âm khác (VD: "hm")
+                syllabic_consonant = None
+                for sc in ['m', 'n', 'ŋ']:
+                    if IPA.startswith(sc):
+                        remainder = IPA.removeprefix(sc)
+                        if remainder == "" or any(remainder.startswith(t) for t in tones):
+                            syllabic_consonant = sc
+                            break
+                
+                if syllabic_consonant:
+                    nucleus = syllabic_consonant
+                    IPA = IPA.removeprefix(syllabic_consonant)
+                
+                elif initial in ['m', 'n', 'ŋ'] and (IPA == "" or any(IPA.startswith(t) for t in tones)):
                     nucleus = initial
                     initial = None
+                
                 else:
                     with open("error_ipa_log.txt", "a", encoding="utf-8") as f:
                         f.write(f"[DEBUG] Pinyin: '{pinyin_str}' | Chuỗi IPA đang xét: '{IPA}' | Chuỗi IPA gốc: '{original_IPA}'\n")
