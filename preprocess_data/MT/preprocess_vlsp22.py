@@ -83,10 +83,10 @@ def translate_emdash_range(text: str) -> str:
     - Đơn vị: %, độ C, và cả THỜI GIAN (Năm, Tháng, Ngày, Giờ)
     """
     
-    # 1. Nhóm ký tự số (giữ nguyên)
+    # 1. Nhóm ký tự số 
     num_chars = r'[0-9零一二三四五六七八九十百千万亿\.]'
     
-    # 2. Nhóm đơn vị (CẬP NHẬT MỚI)
+    # 2. Nhóm đơn vị
     # Thêm: 年(năm), 月(tháng), 日(ngày), 号(ngày), 点(giờ), 时(giờ)
     # [a-zA-Z°℃%]* : Bắt các đơn vị Latin/Ký hiệu (kg, m, %, C...)
     units = r'[a-zA-Z°℃%年月日号点时]*'

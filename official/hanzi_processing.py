@@ -26,7 +26,7 @@ consonants = [
     "tsʰ", "tɕʰ", "tʰ", "ʈʂʰ", "tɕ", "ts", 
     "ʈʂ", "kʰ", "pʰ", "ɕ", "f", "j", "k", 
     "l",  "m", "n", "ŋ", "p", "ʐ", "s", "ʂ", 
-    "t", "w", "x"
+    "t", "w", "x", "ɻ", "ɹ"
 ]
 
 glides = ["j", "w", "ɥ"]
@@ -84,7 +84,8 @@ class HanziProcessor(HanziDecomposer):
                     break
 
             if nucleus is None:
-                print(f"{pinyin_str} does not include nucleus.")
+                with open("error_ipa_log.txt", "a", encoding="utf-8") as f:
+                    f.write(f"[DEBUG] Pinyin: '{pinyin_str}' | Chuỗi IPA đang xét: '{IPA}' | Chuỗi IPA gốc: '{original_IPA}'\n")
                 return False, None
             
             off_medial = None
@@ -155,42 +156,44 @@ class HanziProcessor(HanziDecomposer):
         
         return final_components
 
-    # 4. ĐỊNH NGHĨA PIPELINE MỚI (XỬ LÝ THEO NGỮ CẢNH CÂU)
     def process_sentence(self, sentence: str, number_components: int = 3) -> list:
         """
-        Xử lý một câu Hán tự thô, chuyển mỗi ký tự thành một cấu trúc dữ liệu
-        bao gồm thông tin Ngữ âm (IPA) và Hình tự (Bộ thủ) ĐÃ ĐƯỢC THỐNG NHẤT.
+        Xử lý một câu thô, rẽ nhánh giữa Hán tự và Phi Hán tự (số, dấu câu).
         """
         characters = []
 
-        try:
-            pinyin_list_of_lists = pinyin(sentence, style=Style.TONE3, heteronym=False)
-        except Exception as e:
-            print(f"Lỗi khi xử lý Pinyin cho câu: {e}")
-            return []
-
-        # Lọc ra danh sách Hán tự và Pinyin đã thống nhất
-        hanzi_chars = []
-        unified_pinyins = []
-
-        for i, char in enumerate(sentence):
+        for char in sentence:
             if HANZI_REGEX.match(char):
+                # --- TRƯỜNG HỢP 1: LÀ HÁN TỰ ---
                 try:
-                    hanzi_chars.append(char)
-                    unified_pinyins.append(pinyin_list_of_lists[i][0])
-                except IndexError:
-                    print(f"Lỗi không khớp Pinyin cho ký tự: {char}")
-                    continue
+                    # Lấy pinyin cho từng chữ để đảm bảo không bao giờ lệch index
+                    pinyin_res = pinyin(char, style=Style.TONE3, heteronym=False)
+                    pinyin_str = pinyin_res[0][0] if pinyin_res else char
+                except Exception:
+                    pinyin_str = char
 
-        # --- Lặp qua danh sách ĐÃ THỐNG NHẤT Pinyin ---
-        for char, pinyin_str in zip(hanzi_chars, unified_pinyins):
-            # --- Luồng 1: Xử lý Ngữ âm (IPA) ---
-            analytical, (ipa, ipa_components) = self.process_IPA(pinyin_str)
-            if not analytical:
-                raise Exception(f"Problem(s) occured while processing the character {char} ({pinyin})")
+                # Luồng 1: Xử lý Ngữ âm (IPA)
+                analytical, result = self.process_IPA(pinyin_str, number_components)
+                if analytical:
+                    ipa, ipa_components = result
+                else:
+                    with open("error_ipa_log.txt", "a", encoding="utf-8") as f:
+                        f.write(f"   -> Do Hán tự: '{char}' gây ra.\n")
+                        
+                    # Fallback nếu không bóc tách được IPA
+                    ipa = char
+                    ipa_components = tuple([char] * number_components)
 
-            # --- Luồng 2: Xử lý Hình tự (Bộ thủ) ---
-            radicals = self.process_radical(char)
+                # Luồng 2: Xử lý Hình tự (Bộ thủ)
+                radicals = self.process_radical(char)
+
+            else:
+                # --- TRƯỜNG HỢP 2: KHÔNG PHẢI HÁN TỰ  ---
+                # Ví dụ char = "0", thì ipa_components = ("0", "0", "0") và radicals = ["0"]
+                pinyin_str = char
+                ipa = char
+                ipa_components = tuple([char] * number_components)
+                radicals = [char]
 
             characters.append({
                 'hanzi': char,
@@ -210,10 +213,11 @@ if __name__ == "__main__":
 
     # Danh sách các câu test
     test_cases = [
-        ("你好", "Test chữ 好 trong câu có ngữ cảnh"),
-        ("好", "Test chữ 好 đứng một mình"),
-        ("爱好", "Test đa âm: hào (好) trong 爱好"),
-        ("界", "Test chữ 界 trong câu có ngữ cảnh"),
+        # ("你好", "Test chữ 好 trong câu có ngữ cảnh"),
+        # ("好", "Test chữ 好 đứng một mình"),
+        # ("爱好", "Test đa âm: hào (好) trong 爱好"),
+        # ("界", "Test chữ 界 trong câu có ngữ cảnh"),
+        ("进", "Test chữ 进 trong câu có ngữ cảnh")
     ]
 
     for sentence, description in test_cases:
