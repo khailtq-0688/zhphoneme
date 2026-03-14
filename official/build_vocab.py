@@ -78,4 +78,4 @@ if __name__ == "__main__":
     DATA_FILE = "data_cleaned/baidubaike_cleaned.txt" 
     OUTPUT_DIRECTORY = "vocabs"
     
-    build_vocab_incremental(DATA_FILE, OUTPUT_DIRECTORY, save_every=1000)
+    build_vocab_incremental(DATA_FILE, OUTPUT_DIRECTORY, save_every=2000)

@@ -15,7 +15,8 @@ except ImportError:
 warnings.filterwarnings('ignore', category=UserWarning, module='pinyin_to_ipa')
 
 # 2. Định nghĩa một regex để chỉ xử lý Hán tự
-HANZI_REGEX = re.compile(u"[\u4e00-\u9fff]")
+# HANZI_REGEX = re.compile(u"[\u4e00-\u9fff]")
+HANZI_REGEX = re.compile(u"[\u3400-\u4dbf\u4e00-\u9fff]")
 
 # 3. Regex để tách thanh điệu IPA 
 # Các ký hiệu thanh điệu IPA là ˥ (cao), ˧ (trung), ˩ (thấp)
@@ -34,7 +35,7 @@ glides = ["j", "w", "ɥ"]
 vowels = [
     "aɪ", "aʊ", "eɪ", "oʊ", "a", "ɑ", 
     "ɛ", "e", "ə", "ɚ", "ɤ", "o", "i",
-    "ɻ̩", "ɹ̩", "u", "ʊ", "y",
+    "ɻ̩", "ɹ̩", "u", "ʊ", "y", "ɔ"
 ]
 
 off_glides = ["i̯", "u̯"]
@@ -84,9 +85,15 @@ class HanziProcessor(HanziDecomposer):
                     break
 
             if nucleus is None:
-                with open("error_ipa_log.txt", "a", encoding="utf-8") as f:
-                    f.write(f"[DEBUG] Pinyin: '{pinyin_str}' | Chuỗi IPA đang xét: '{IPA}' | Chuỗi IPA gốc: '{original_IPA}'\n")
-                return False, None
+                # Nếu initial là phụ âm mũi (n, m, ŋ) và phần còn lại chỉ chứa thanh điệu
+                # => Đẩy initial sang làm nucleus (âm tiết chính)
+                if initial in ['m', 'n', 'ŋ'] and (IPA == "" or any(IPA.startswith(t) for t in tones)):
+                    nucleus = initial
+                    initial = None
+                else:
+                    with open("error_ipa_log.txt", "a", encoding="utf-8") as f:
+                        f.write(f"[DEBUG] Pinyin: '{pinyin_str}' | Chuỗi IPA đang xét: '{IPA}' | Chuỗi IPA gốc: '{original_IPA}'\n")
+                    return False, None
             
             off_medial = None
             for off_glide in off_glides:
@@ -180,7 +187,7 @@ class HanziProcessor(HanziDecomposer):
                     with open("error_ipa_log.txt", "a", encoding="utf-8") as f:
                         f.write(f"   -> Do Hán tự: '{char}' gây ra.\n")
                         
-                    # Fallback nếu không bóc tách được IPA
+                    # Fallback an toàn nếu không bóc tách được IPA
                     ipa = char
                     ipa_components = tuple([char] * number_components)
 
@@ -188,7 +195,7 @@ class HanziProcessor(HanziDecomposer):
                 radicals = self.process_radical(char)
 
             else:
-                # --- TRƯỜNG HỢP 2: KHÔNG PHẢI HÁN TỰ  ---
+                # --- TRƯỜNG HỢP 2: KHÔNG PHẢI HÁN TỰ (Logic của Mentor) ---
                 # Ví dụ char = "0", thì ipa_components = ("0", "0", "0") và radicals = ["0"]
                 pinyin_str = char
                 ipa = char
