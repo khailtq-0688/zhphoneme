@@ -9,3 +9,4 @@ scripts/
 
 *checkpoints/
 .pre-commit-config.yaml
+*examine*
