@@ -49,6 +49,42 @@ class HanziProcessor(HanziDecomposer):
     def __init__(self):
         super().__init__()
 
+        # special cases
+        self.radicals["凸"] = "convex"
+        self.radicals["凹"] = "concave"
+        self.radicals["𠕄"] = ""
+
+        # ra, rd, and rd/m double the occurence of radicals
+        for character in self.characters:
+            decomp_type = self.characters[character]["decomposition_type"]
+            components = self.characters[character]["components"]
+
+            if decomp_type in ["mps", "me", "mt"]:
+                assert len(components) == 1, f"Error at character {character} having components {components} while the decomposition type is {decomp_type}"
+                component = components[0]
+                if component in self.radicals:
+                    self.radicals[character] = self.radicals[component]
+
+            if decomp_type in ["ra", "rd", "rd/m", "rrefl", "rrefr", "rrefl/m", "rrefr/m"]:
+                assert len(components) == 1, f"Error at character {character} having components {components} while the decomposition type is {decomp_type}"
+                components = components * 2
+                self.characters[character]["components"] = components
+            
+            if decomp_type in ["r3tr", "r3gw"]:
+                assert len(components) == 1, f"Error at character {character} having components {components} while the decomposition type is {decomp_type}"
+                components = components * 3
+                self.characters[character]["components"] = components
+
+            if decomp_type in ["r4sq", "r4a"]:
+                assert len(components) == 1, f"Error at character {character} having components {components} while the decomposition type is {decomp_type}"
+                components = components * 4
+                self.characters[character]["components"] = components
+
+            if decomp_type in ["r5x"]:
+                assert len(components) == 1, f"Error at character {character} having components {components} while the decomposition type is {decomp_type}"
+                components = components * 5
+                self.characters[character]["components"] = components
+
     def process_IPA(self, pinyin_str: str, number_components: int = 3) -> tuple[bool, tuple[str]]:
         ipa_variants = pinyin_to_ipa(pinyin_str)
 
@@ -165,6 +201,10 @@ class HanziProcessor(HanziDecomposer):
         if char not in self.characters:
             return [char]
 
+
+        decomp_type = self.characters[char]["decomposition_type"]
+        if decomp_type == "c":
+            return [char]
 
         components = self.characters[char]['components']
         
