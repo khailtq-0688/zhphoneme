@@ -3,13 +3,7 @@ import warnings
 from hanzipy.decomposer import HanziDecomposer
 import json
 from pinyin_to_ipa import pinyin_to_ipa
-
-try:
-    from pypinyin import pinyin, Style
-except ImportError:
-    print("LỖI: Không tìm thấy thư viện 'pypinyin'.")
-    print("Hãy cài đặt: pip install pypinyin")
-    exit()
+from pypinyin import pinyin, Style
 
 # Tắt các cảnh báo không cần thiết từ pinyin-to-ipa
 warnings.filterwarnings('ignore', category=UserWarning, module='pinyin_to_ipa')
@@ -86,6 +80,8 @@ class HanziProcessor(HanziDecomposer):
                 self.characters[character]["components"] = components
 
     def process_IPA(self, pinyin_str: str, number_components: int = 3) -> tuple[bool, tuple[str]]:
+        if pinyin_str is None:
+            raise Exception("In HanziProcessor::process_IPA - Receive None input")
         ipa_variants = pinyin_to_ipa(pinyin_str)
 
         if ipa_variants:
@@ -224,12 +220,14 @@ class HanziProcessor(HanziDecomposer):
         for char in sentence:
             if HANZI_REGEX.match(char):
                 # --- TRƯỜNG HỢP 1: LÀ HÁN TỰ ---
-                try:
-                    # Lấy pinyin cho từng chữ để đảm bảo không bao giờ lệch index
-                    pinyin_res = pinyin(char, style=Style.TONE3, heteronym=False)
-                    pinyin_str = pinyin_res[0][0] if pinyin_res else char
-                except Exception:
-                    pinyin_str = char
+                # try:
+                
+                # Lấy pinyin cho từng chữ để đảm bảo không bao giờ lệch index
+                pinyin_res = pinyin(char, style=Style.TONE3, heteronym=False)
+                pinyin_str = pinyin_res[0][0] if pinyin_res else None
+                
+                # except Exception:
+                #     pinyin_str = char
 
                 # Luồng 1: Xử lý Ngữ âm (IPA)
                 analytical, result = self.process_IPA(pinyin_str, number_components)
@@ -264,23 +262,4 @@ class HanziProcessor(HanziDecomposer):
 
         return characters
 
-if __name__ == "__main__":
-    print("\n*** Chạy pipeline (phiên bản đã sửa - luôn thống nhất 1 IPA) ***")
-
-    # Khởi tạo bộ xử lý
-    processor = HanziProcessor()
-
-    # Danh sách các câu test
-    test_cases = [
-        # ("你好", "Test chữ 好 trong câu có ngữ cảnh"),
-        # ("好", "Test chữ 好 đứng một mình"),
-        # ("爱好", "Test đa âm: hào (好) trong 爱好"),
-        # ("界", "Test chữ 界 trong câu có ngữ cảnh"),
-        ("进", "Test chữ 进 trong câu có ngữ cảnh")
-    ]
-
-    for sentence, description in test_cases:
-        print(f"\n--- {description}: '{sentence}' ---")
-        result = processor.process_sentence(sentence)
-        print(json.dumps(result, indent=2, ensure_ascii=False))
 
