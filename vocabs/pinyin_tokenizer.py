@@ -1,7 +1,7 @@
 import torch
 
 from pypinyin import pinyin, Style
-from configs.PinyinBERT import PinyinBertConfig
+from configs.PinyinBERTConfig import PinyinBertConfig
 from pinyin_decomposation import hanzi_to_components
 
 from typing import *

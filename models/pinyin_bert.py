@@ -3,7 +3,7 @@ from torch import nn
 from transformers.models import PreTrainedModel
 from transformers.models.bert import BertModel
 
-from configs.PinyinBERT import PinyinBertConfig
+from configs.PinyinBERTConfig import PinyinBertConfig
 
 class PinyinBert(PreTrainedModel):
     def __init__(self, config: PinyinBertConfig):
