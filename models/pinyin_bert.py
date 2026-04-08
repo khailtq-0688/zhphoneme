@@ -1,9 +1,9 @@
 import torch
 from torch import nn
-from transformers.models import PreTrainedModel
+from transformers import PreTrainedModel
 from transformers.models.bert import BertModel
 
-from configs.PinyinBERTConfig import PinyinBertConfig
+from configs.pinyin_bert_config import PinyinBertConfig
 
 class PinyinBert(PreTrainedModel):
     def __init__(self, config: PinyinBertConfig):

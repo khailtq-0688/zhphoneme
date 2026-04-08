@@ -1,8 +1,8 @@
 import torch
 
 from pypinyin import pinyin, Style
-from configs.PinyinBERTConfig import PinyinBertConfig
-from pinyin_decomposation import hanzi_to_components
+from configs.pinyin_bert_config import PinyinBertConfig
+from .pinyin_decomposation import hanzi_to_components
 
 from typing import *
 import random
