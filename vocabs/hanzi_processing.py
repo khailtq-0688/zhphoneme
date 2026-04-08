@@ -20,7 +20,7 @@ consonants = [
     "tsʰ", "tɕʰ", "tʰ", "ʈʂʰ", "tɕ", "ts", 
     "ʈʂ", "kʰ", "pʰ", "ɕ", "f", "j", "k", 
     "l",  "m", "n", "ŋ", "p", "ʐ", "s", "ʂ", 
-    "t", "w", "x", "ɻ", "ɹ", "h"
+    "t", "w", "x", "ɹ̩", "ɻ", "ɹ", "h"
 ]
 
 glides = ["j", "w", "ɥ"]
@@ -34,8 +34,7 @@ vowels = [
 off_glides = ["i̯", "u̯"]
 
 tones = [
-    "˧˩", "˩˧", "˧˩˧", "˧˥",
-    "˥˩", "˥", "˩", "˧", "˩"
+    "˧˩˧", "˧˧˥", "˧˩", "˩˧", "˥˧", "˥˩", "˧˥", "˥", "˩", "˧", "˩",
 ]
 
 class HanziProcessor(HanziDecomposer):
@@ -81,14 +80,27 @@ class HanziProcessor(HanziDecomposer):
     def process_IPA(self, pinyin_str: str, number_components: int = 3) -> tuple[bool, tuple[str]]:
         if pinyin_str is None:
             raise Exception("In HanziProcessor::process_IPA - Receive None input")
-        ipa_variants = pinyin_to_ipa(pinyin_str)
+        try:
+            ipa_variants = pinyin_to_ipa(pinyin_str)
+        except:
+            return False, None
 
         if ipa_variants:
             # *** THỐNG NHẤT IPA ***
             # Luôn chọn cách phát âm đầu tiên (phổ biến nhất)
-            IPA = list(ipa_variants)[0] # (vd: ('x', 'au̯˧˩˧') hoặc ('ai̯˥˩',))
+            IPA = list(list(ipa_variants)[0]) # (vd: ('x', 'au̯˧˩˧') hoặc ('ai̯˥˩',))
             IPA = "".join(IPA)
             original_IPA = IPA
+
+            tone = ""
+            _tones = set("".join(tones))
+            for ipa in IPA:
+                if ipa in _tones:
+                    tone += ipa
+                    IPA = IPA.replace(ipa, "")
+
+            if tone == "":
+                tone = None
 
             initial = None
             for consonant in consonants:
@@ -143,13 +155,6 @@ class HanziProcessor(HanziDecomposer):
                 if IPA.startswith(off_glide):
                     off_medial = off_glide
                     IPA = IPA.removeprefix(off_medial)
-                    break
-            
-            tone = None
-            for _tone in tones:
-                if IPA.startswith(_tone):
-                    tone = _tone
-                    IPA = IPA.removeprefix(tone)
                     break
 
             if IPA == "":

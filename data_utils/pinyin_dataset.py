@@ -35,7 +35,7 @@ class PinyinDataset(Dataset):
         self.corpus_file = corpus_file
         self.tokenizer = tokenizer
         with open(corpus_file) as file:
-            self.total_line = sum(1 for _ in file)
+            self.total_line = sum([1 for _ in file])
 
     def __len__(self):
         return self.total_line
@@ -47,6 +47,6 @@ class PinyinDataset(Dataset):
                     text = line
                     break
 
-        encoded_text = self.tokenizer(text)
+        encoded_text = self.tokenizer.tokenize(text)
 
         return encoded_text

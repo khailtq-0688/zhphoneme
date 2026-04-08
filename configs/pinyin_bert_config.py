@@ -43,8 +43,8 @@ class PinyinBertConfig(PretrainedConfig):
         self.empty_token = "<empty>"
         self.mask_token = "<mask>"
         self.unk_token = "<unk>"
-        
-        self.specials = [self.pad_token, self.cls_token_id, self.empty_token, self.mask_token_id, self.unk_token]
+
+        self.specials = [self.pad_token, self.cls_token, self.empty_token, self.mask_token, self.unk_token]
 
         self.pad_token_id = 0
         self.cls_token_id = 1
@@ -52,23 +52,27 @@ class PinyinBertConfig(PretrainedConfig):
         self.mask_token_id = 3
         self.unk_token_id = 4
 
+        self.special_ids = [self.pad_token_id, self.cls_token_id, self.empty_token_id, self.mask_token_id, self.unk_token_id]
+
         initials = [
-            "p", "pʰ", "m", "f", "t", "tʰ", "n", "l", "k", 
-            "kʰ", "x", "tɕ", "tɕʰ", "ɕ", "ʈʂ", "ʈʂʰ", "ʂ", 
-            "ʐ", "ts", "tsʰ", "s"
+            "tsʰ", "tɕʰ", "tʰ", "ʈʂʰ", "tɕ", "ts", 
+            "ʈʂ", "kʰ", "pʰ", "ɕ", "f", "j", "k", 
+            "l",  "m", "n", "ŋ", "p", "ʐ", "s", "ʂ", 
+            "t", "w", "x", "ɹ̩", "ɻ", "ɹ", "h"
         ]
         rhymes = [
-            "a", "ɔ", "o", "ɤ", "i", "u", "y",
+            "a", "ɔ", "o", "ɤ", "i", "u", "y", "ɥe",
             "ai̯", "ei̯", "au̯", "ou̯", "iau̯", "iou̯",
             "uai̯", "uei̯", "an", "ən", "in", "uən",
-            "yn", "ɤŋ", "ɑŋ", "əŋ", "iŋ", "ʊŋ", "ja", 
-            "jɛ", "wa", "wo", "yɛ", "jɛn", "jɑŋ",
-            "jʊŋ", "wan", "wɑŋ", "wəŋ", "ɿ", "ʅ"
+            "yn", "ɤŋ", "aŋ", "əŋ", "iŋ", "ʊŋ", "ja", 
+            "je", "jɛ", "wa", "wo", "ye", "yɛ", "jɛn", "jen", "jaŋ",
+            "jʊŋ", "wan", "waŋ", "wəŋ", "ɿ", "ʅ", "ɻ̩", "ɥɛn"
         ]
-        tones = [0, 1, 2, 3, 4, 5]
-        others = []
+        tones = [
+            "˧˩˧", "˧˧˥", "˧˩", "˩˧", "˥˧", "˥˩", "˧˥", "˥", "˩", "˧", "˩",
+        ]
 
-        phonemes = initials + rhymes + tones + others
+        phonemes = initials + rhymes + tones
         self.id2label = {idx: phoneme for idx, phoneme in enumerate(self.specials + phonemes)}
         self.label2id = {phoneme: idx for idx, phoneme in enumerate(self.specials + phonemes)}
 
