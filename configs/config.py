@@ -1,8 +1,10 @@
 """
 Configuration for ViWordFormer Pretraining
+Follows ViWordFormer builder pattern
 """
 
 import json
+import yaml
 from typing import Dict, Any
 from pathlib import Path
 from dataclasses import dataclass, asdict
@@ -160,6 +162,40 @@ class PretrainingConfig:
 def get_default_config() -> PretrainingConfig:
     """Get default configuration"""
     return PretrainingConfig()
+
+
+def load_config_from_yaml(yaml_path: str) -> Dict[str, Any]:
+    """Load configuration from YAML file"""
+    with open(yaml_path, 'r', encoding='utf-8') as f:
+        config = yaml.safe_load(f)
+    return config if config is not None else {}
+
+
+class DotDict(dict):
+    """Dictionary that supports dot notation access"""
+    def __getattr__(self, name):
+        if name in self:
+            return self[name]
+        raise AttributeError(f"No attribute '{name}'")
+    
+    def __setattr__(self, name, value):
+        self[name] = value
+    
+    def __delattr__(self, name):
+        if name in self:
+            del self[name]
+        else:
+            raise AttributeError(f"No attribute '{name}'")
+
+
+def dict_to_dotdict(d: dict) -> DotDict:
+    """Convert nested dict to DotDict for dot notation access"""
+    if isinstance(d, dict):
+        return DotDict({k: dict_to_dotdict(v) for k, v in d.items()})
+    elif isinstance(d, list):
+        return [dict_to_dotdict(item) for item in d]
+    else:
+        return d
 
 
 if __name__ == "__main__":
