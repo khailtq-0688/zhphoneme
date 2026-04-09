@@ -1,35 +1,14 @@
 """
 ViWordFormer Model for Pretraining
-Adapted for multilingual Vietnamese and Chinese
+Adapted for multilingual Vietnamese and Chinese (MLM Objective)
 """
 
 import torch
 import torch.nn as nn
 import math
-from typing import Tuple, Dict, List
+from typing import Dict
 
 from .attention import ScaledDotProductAttention, PhrasalLexemeAttention
-
-
-def generate_padding_mask(sequences: torch.Tensor, padding_value: int = 0) -> torch.Tensor:
-    """
-    Generate padding mask for sequences
-    
-    Args:
-        sequences: (bs, seq_len) or (bs, seq_len, dim)
-        padding_value: The padding value
-        
-    Returns:
-        mask: (bs, seq_len)
-    """
-    if len(sequences.shape) == 2:  # (bs, seq_len)
-        __seq = sequences.unsqueeze(dim=-1)  # (bs, seq_len, 1)
-    else:
-        __seq = sequences
-
-    mask = (torch.sum(__seq, dim=-1) == (padding_value * __seq.shape[-1])).long()  # (bs, seq_len)
-    return mask
-
 
 class PositionwiseFeedForward(nn.Module):
     """Position-wise Feed Forward Network"""
@@ -48,15 +27,13 @@ class PositionwiseFeedForward(nn.Module):
         features = self.proj_dmodel(features)
         return features
 
-
 class PositionalEncoding(nn.Module):
-    """Positional Encoding (Sinusoidal)"""
+    """Positional Encoding"""
     
-    def __init__(self, d_model: int, max_len: int = 512):
+    def __init__(self, d_model: int, max_len: int = 4096):
         super(PositionalEncoding, self).__init__()
         self.dropout = nn.Dropout(p=0.1)
         
-        # Compute the positional encodings once in log space
         pe = torch.zeros(max_len, d_model)
         position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
         div_term = torch.exp(torch.arange(0, d_model, 2).float() * (-math.log(10000.0) / d_model))
@@ -68,12 +45,10 @@ class PositionalEncoding(nn.Module):
         self.register_buffer('pe', pe)
         
     def forward(self, features: torch.Tensor) -> torch.Tensor:
-        """Add positional encoding to features"""
         pe = self.pe[:, :features.size(1)]
         pe = pe.expand(features.size(0), -1, -1)
         features = features + pe
         return self.dropout(features)
-
 
 class PhrasalLexemeEncoderLayer(nn.Module):
     """Single layer of Phrasal Lexeme Encoder"""
@@ -93,39 +68,22 @@ class PhrasalLexemeEncoderLayer(nn.Module):
         self.norm_1 = nn.LayerNorm(d_model)
         self.norm_2 = nn.LayerNorm(d_model)
 
-    def forward(
-        self, 
-        inputs: torch.Tensor, 
-        attention_mask: torch.Tensor, 
-        phrasal_attn: torch.Tensor
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-        """
-        Forward pass
-        
-        Args:
-            inputs: (bs, nq, d_model)
-            attention_mask: (bs, nq)
-            phrasal_attn: (bs, head, nq, nq) - Phrasal Lexeme Attention from previous layers
-            
-        Returns:
-            output, self_attn, phrasal_attn, combined_attn
-        """
-        # Performing phrasal lexeme attention
+    def forward(self, inputs: torch.Tensor, attention_mask: torch.Tensor, phrasal_attn: torch.Tensor):
+        # Phrasal lexeme attention
         P, phrasal_attn = self.phrasal_lexeme_attn(inputs, attention_mask, phrasal_attn)
-        # Performing self-attention
+        # Self-attention
         self_attn = self.self_attn(inputs, inputs, inputs, attention_mask)
 
         attn_scores = P * self_attn
         b_s, nq = inputs.shape[:2]
         
-        v = self.linear_out(inputs).view(b_s, nq, self.head, self.d_kv).permute(0, 2, 1, 3)  # (b_s, h, nq, d_kv)
-        features = torch.matmul(attn_scores, v).permute(0, 2, 1, 3).contiguous().view(b_s, nq, self.head * self.d_kv)  # (b_s, nq, h*d_kv)
+        v = self.linear_out(inputs).view(b_s, nq, self.head, self.d_kv).permute(0, 2, 1, 3) 
+        features = torch.matmul(attn_scores, v).permute(0, 2, 1, 3).contiguous().view(b_s, nq, self.head * self.d_kv) 
         
         features = self.norm_1(features + inputs)
         out = self.norm_2(features + self.feed_forward(features))
 
         return out, self_attn, phrasal_attn, attn_scores
-
 
 class PhrasalLexemeEncoder(nn.Module):
     """Phrasal Lexeme Encoder - Stack of encoder layers"""
@@ -138,26 +96,11 @@ class PhrasalLexemeEncoder(nn.Module):
             for _ in range(nlayers)
         ])
 
-    def forward(
-        self, 
-        inputs: torch.Tensor, 
-        attention_mask: torch.Tensor
-    ) -> Tuple[torch.Tensor, Tuple[List, List, List]]:
-        """
-        Forward pass
-        
-        Args:
-            inputs: (bs, nq, d_model)
-            attention_mask: (bs, nq)
-            
-        Returns:
-            features, (self_attns, phrasal_attns, attn_scores)
-        """
+    def forward(self, inputs: torch.Tensor, attention_mask: torch.Tensor):
         self_attns = []
         phrasal_attns = []
         attn_scores = []
 
-        # Initially phrasal lexeme attention scores are 0
         phrasal_attn = 0.
         features = inputs
         
@@ -169,30 +112,13 @@ class PhrasalLexemeEncoder(nn.Module):
 
         return features, (self_attns, phrasal_attns, attn_scores)
 
-
-class ViWordFormer(nn.Module):
-    """ViWordFormer Model for Multilingual Pretraining"""
+class Model(nn.Module):
+    """Model for MLM"""
     
     def __init__(self, vocab_size: int, d_model: int = 768, nlayers: int = 12, 
                  head: int = 12, d_q: int = 64, d_kv: int = 64, d_ff: int = 3072, 
-                 dropout: float = 0.1, pad_idx: int = 0, max_seq_len: int = 512,
-                 label_smoothing: float = 0.1):
-        """
-        Initialize ViWordFormer
-        
-        Args:
-            vocab_size: Size of vocabulary
-            d_model: Model dimension
-            nlayers: Number of encoder layers
-            head: Number of attention heads
-            d_q: Query dimension per head
-            d_kv: Key/Value dimension per head
-            d_ff: Feed-forward dimension
-            dropout: Dropout rate
-            pad_idx: Padding index
-            max_seq_len: Maximum sequence length
-            label_smoothing: Label smoothing factor
-        """
+                 dropout: float = 0.1, pad_idx: int = 0, max_seq_len: int = 4096,
+                 label_smoothing: float = 0.0): 
         super().__init__()
 
         self.pad_idx = pad_idx
@@ -208,13 +134,8 @@ class ViWordFormer(nn.Module):
         self.norm = nn.LayerNorm(d_model)
 
         self.encoder = PhrasalLexemeEncoder(
-            nlayers=nlayers,
-            head=head,
-            d_model=d_model,
-            d_q=d_q,
-            d_kv=d_kv,
-            d_ff=d_ff,
-            dropout=dropout
+            nlayers=nlayers, head=head, d_model=d_model,
+            d_q=d_q, d_kv=d_kv, d_ff=d_ff, dropout=dropout
         )
 
         self.proj_vocab = nn.Linear(
@@ -222,20 +143,11 @@ class ViWordFormer(nn.Module):
             out_features=vocab_size
         )
         self.dropout = nn.Dropout(dropout)
-        self.loss = nn.CrossEntropyLoss(ignore_index=self.pad_idx, label_smoothing=label_smoothing)
-
-    def forward(self, input_ids: torch.Tensor, labels: torch.Tensor = None) -> Tuple[torch.Tensor, torch.Tensor, Tuple]:
-        """
-        Forward pass for pretraining
         
-        Args:
-            input_ids: (bs, seq_len)
-            labels: (bs, seq_len) or None
-            
-        Returns:
-            logits, loss, attentions
-        """
-        padding_mask = generate_padding_mask(input_ids, padding_value=self.pad_idx).to(input_ids.device)
+        self.loss = nn.CrossEntropyLoss(ignore_index=-100, label_smoothing=label_smoothing)
+
+    def forward(self, input_ids: torch.Tensor, labels: torch.Tensor = None):
+        padding_mask = (input_ids != self.pad_idx).long().to(input_ids.device)
 
         features = self.embedding(input_ids)
         features = self.pe(features)
@@ -243,22 +155,21 @@ class ViWordFormer(nn.Module):
 
         features, attentions = self.encoder(features, padding_mask)
         
-        # Use CLS token (first token) for sentence-level representation
-        cls_features = features[:, 0]
-        logits = self.proj_vocab(cls_features)
+        logits = self.proj_vocab(features) # (Batch_Size, Seq_Len, Vocab_Size)
 
         loss = None
         if labels is not None:
-            loss = self.loss(logits, labels.squeeze(-1))
+            active_logits = logits.view(-1, self.vocab_size)
+            active_labels = labels.view(-1)
+            
+            loss = self.loss(active_logits, active_labels)
 
         return logits, loss, attentions
     
     def get_embedding_weight(self) -> torch.Tensor:
-        """Get embedding weights"""
         return self.embedding.weight
     
     def get_config(self) -> Dict:
-        """Get model configuration"""
         return {
             'vocab_size': self.vocab_size,
             'd_model': self.d_model,
