@@ -1,0 +1,55 @@
+# ViWordFormer Chinese Fine-tuning Configuration
+# Load pretrained multilingual model and fine-tune on Chinese data
+
+tokenizer:
+  type: unigram
+  vocab_size: 30000
+  model_path: ./tokenizers/unigram_tokenizer.model
+
+model:
+  type: viwordformer
+  d_model: 768
+  nlayers: 12
+  head: 12
+  d_ff: 3072
+  dropout: 0.1
+  attention_dropout: 0.1
+  vocab_size: 30000
+
+dataset:
+  max_seq_len: 512
+  mlm_probability: 0.15  # Percentage of tokens to mask
+  include_cls_sep: true
+
+data_paths:
+  vietnamese:
+    path: ""  # Not used for Chinese fine-tuning
+  chinese:
+    path: "/path/to/chinese/commoncrawl/dataset"
+
+training:
+  optimizer: adamw
+  learning_rate: 0.00005  # Lower learning rate for fine-tuning
+  weight_decay: 0.01
+  batch_size: 16  # Can be reduced if running out of memory
+  num_epochs: 1
+  warmup_steps: 500
+  scheduler: linear
+  gradient_accumulation_steps: 2
+  gradient_clip_norm: 1.0
+  save_steps: 1000
+  eval_steps: 2000
+
+preprocessing:
+  output_dir: ./processed_data/chinese_finetune
+  merge_output: chinese_processed.txt
+
+checkpoint:
+  checkpoint_dir: ./checkpoints/chinese_finetune
+  save_best: true
+  save_last: true
+  keep_last_n: 3
+
+device: cuda  # 'cuda' for GPU, 'cpu' for CPU
+seed: 42
+mixed_precision: false  # Set to true for FP16 training if GPU supports it
