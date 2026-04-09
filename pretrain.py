@@ -30,9 +30,9 @@ logger = logging.getLogger(__name__)
 
 def register_model():
     """Register models with architecture registry"""
-    from models.viwordformer import ViWordFormer
-    logger.info("Registering ViWordFormer model...")
-    META_ARCHITECTURE.register(ViWordFormer)
+    from models.viwordformer import Model
+    logger.info("Registering Model...")
+    META_ARCHITECTURE.register(Model)
 
 
 def load_config(config_path: str):

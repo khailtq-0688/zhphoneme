@@ -12,7 +12,7 @@ import torch
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from models.viwordformer import ViWordFormer
+from models.viwordformer import Model
 from tokenizer.unigram_tokenizer import UnigramTokenizer
 from configs.config import PretrainingConfig
 import logging
@@ -50,7 +50,7 @@ class ViWordFormerInference:
         logger.info(f"Loaded tokenizer from {tokenizer_path}")
         
         # Load model
-        self.model = ViWordFormer(
+        self.model = Model(
             vocab_size=self.config.model.vocab_size,
             d_model=self.config.model.d_model,
             nlayers=self.config.model.nlayers,

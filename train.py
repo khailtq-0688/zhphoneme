@@ -21,7 +21,7 @@ from tqdm import tqdm
 # Import from local modules
 from configs.config import PretrainingConfig, get_default_config
 from tokenizer.unigram_tokenizer import UnigramTokenizer
-from models.viwordformer import ViWordFormer
+from models.viwordformer import Model
 from data_processing.data_processor import VietnameseProcessor, ChineseProcessor, DataMerger
 
 logging.basicConfig(
@@ -132,7 +132,7 @@ class Trainer:
         Path(config.training.checkpoint_dir).mkdir(parents=True, exist_ok=True)
         
         # Initialize model
-        self.model = ViWordFormer(
+        self.model = Model(
             vocab_size=config.model.vocab_size,
             d_model=config.model.d_model,
             nlayers=config.model.nlayers,
