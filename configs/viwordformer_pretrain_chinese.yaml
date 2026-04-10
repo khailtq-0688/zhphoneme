@@ -1,0 +1,55 @@
+# ViWordFormer Chinese Independent Pretraining Configuration
+# Trains model from scratch on Chinese CommonCrawl dataset only
+
+tokenizer:
+  type: unigram
+  vocab_size: 30000
+  model_prefix: ./tokenizers/unigram_tokenizer_chinese
+
+model:
+  type: viwordformer
+  d_model: 768
+  nlayers: 12
+  head: 12
+  d_ff: 3072
+  dropout: 0.1
+  attention_dropout: 0.1
+  vocab_size: 30000
+
+dataset:
+  max_seq_len: 512
+  mlm_probability: 0.15  # Percentage of tokens to mask
+  include_cls_sep: true
+
+data_paths:
+  vietnamese:
+    path: ""  # Not used
+  chinese:
+    path: "/path/to/chinese/commoncrawl/dataset"
+
+training:
+  optimizer: adamw
+  learning_rate: 0.0001
+  weight_decay: 0.01
+  batch_size: 32  # Adjust based on GPU memory
+  num_epochs: 3
+  warmup_steps: 1000
+  scheduler: linear
+  gradient_accumulation_steps: 1
+  gradient_clip_norm: 1.0
+  save_steps: 1000
+  eval_steps: 2000
+
+preprocessing:
+  output_dir: ./processed_data/chinese_pretrain
+  merge_output: chinese_processed.txt
+
+checkpoint:
+  checkpoint_dir: ./checkpoints/chinese_pretrain
+  save_best: true
+  save_last: true
+  keep_last_n: 3
+
+device: cuda  # 'cuda' for GPU, 'cpu' for CPU
+seed: 42
+mixed_precision: false  # Set to true for FP16 training if GPU supports it
