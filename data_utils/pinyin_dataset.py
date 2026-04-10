@@ -4,6 +4,8 @@ from torch.utils.data import Dataset
 from vocabs.pinyin_tokenizer import PinyinTokenizer
 from vocabs.pinyin_tokenizer import PinyinEncodedTokens
 
+import os
+
 PAD_TOKEN_ID = 0
 
 def collate_fn(samples: list[PinyinEncodedTokens]):
@@ -31,22 +33,19 @@ def collate_fn(samples: list[PinyinEncodedTokens]):
     )
 
 class PinyinDataset(Dataset):
-    def __init__(self, tokenizer: PinyinTokenizer, corpus_file, max_length=4096):
+    def __init__(self, tokenizer: PinyinTokenizer, corpus_dir, max_length=256):
         self.max_length = max_length
-        self.corpus_file = corpus_file
+        self.corpus_dir = corpus_dir
         self.tokenizer = tokenizer
-        with open(corpus_file) as file:
-            self.total_line = sum([1 for _ in file])
+        self.total_line = len(os.listdir(corpus_dir))
 
     def __len__(self):
         return self.total_line
 
     def __getitem__(self, idx):
-        with open(self.corpus_file) as file:
-            for irow, line in enumerate(file):
-                if irow == idx:
-                    text = line
-                    break
+        # the default format for the corpus file of each line if line_<idx>.txt
+        with open(os.path.join(self.corpus_dir, f"line_{idx}.txt"), "w+") as file:
+            text = file.read()
 
         encoded_text = self.tokenizer.tokenize(text)
 
