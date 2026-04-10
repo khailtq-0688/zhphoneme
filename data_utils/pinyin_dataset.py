@@ -14,14 +14,15 @@ def collate_fn(samples: list[PinyinEncodedTokens]):
             max_len = length
 
     bs = len(samples)
-    input_ids = torch.zeros((bs, max_len, 3)).fill_(PAD_TOKEN_ID)
-    labels = torch.zeros((bs, max_len, 3)).fill_(PAD_TOKEN_ID)
+    input_ids = torch.zeros((bs, max_len, 3)).fill_(PAD_TOKEN_ID).long()
+    labels = torch.zeros((bs, max_len, 3)).fill_(PAD_TOKEN_ID).long()
     attention_mask = torch.ones((bs, max_len))
 
     for idx, sample in enumerate(samples):
-        input_ids[idx] = sample.input_ids
-        labels[idx] = sample.labels
-        attention_mask[idx] = sample.attention_mask
+        input_len = sample.input_ids.shape[0]
+        input_ids[idx, :input_len] = sample.input_ids
+        labels[idx, :input_len] = sample.labels
+        attention_mask[idx, :input_len] = sample.attention_mask
 
     return PinyinEncodedTokens(
         input_ids=input_ids,

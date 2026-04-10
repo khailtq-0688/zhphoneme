@@ -14,6 +14,7 @@ class PinyinBertConfig(PretrainedConfig):
         attention_probs_dropout_prob=0.1,
         max_position_embeddings=512,
         max_length=4096,
+        type_vocab_size=1,
         initializer_range=0.02,
         layer_norm_eps=1e-12,
         position_embedding_type="absolute",
@@ -32,6 +33,7 @@ class PinyinBertConfig(PretrainedConfig):
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.max_position_embeddings = max_position_embeddings
         self.max_length = max_length
+        self.type_vocab_size = type_vocab_size
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
         self.position_embedding_type = position_embedding_type
@@ -54,25 +56,32 @@ class PinyinBertConfig(PretrainedConfig):
 
         self.special_ids = [self.pad_token_id, self.cls_token_id, self.empty_token_id, self.mask_token_id, self.unk_token_id]
 
-        initials = [
-            "tsʰ", "tɕʰ", "tʰ", "ʈʂʰ", "tɕ", "ts", 
-            "ʈʂ", "kʰ", "pʰ", "ɕ", "f", "j", "k", 
-            "l",  "m", "n", "ŋ", "p", "ʐ", "s", "ʂ", 
-            "t", "w", "x", "ɹ̩", "ɻ", "ɹ", "h"
+        self.initials = [
+            "tɕ", "m", "p", "tʰ", "t", "s", "ts", "k", "ɕ", "ʈʂʰ", "kʰ", "l",
+            "h", "n", "ʈʂ", "x", "f", "w", "ʂ", "tɕʰ", "ɻ", "pʰ", "tsʰ"
         ]
-        rhymes = [
-            "a", "ɔ", "o", "ɤ", "i", "u", "y", "ɥe",
-            "ai̯", "ei̯", "au̯", "ou̯", "iau̯", "iou̯",
-            "uai̯", "uei̯", "an", "ən", "in", "uən",
-            "yn", "ɤŋ", "aŋ", "əŋ", "iŋ", "ʊŋ", "ja", 
-            "je", "jɛ", "wa", "wo", "ye", "yɛ", "jɛn", "jen", "jaŋ",
-            "jʊŋ", "wan", "waŋ", "wəŋ", "ɿ", "ʅ", "ɻ̩", "ɥɛn"
+        self.rhymes = [
+            "au̯", "y", "wən", "ɤ", "jaŋ", "je","aŋ", 
+            "wai̯", "iŋ", "a", "ɹ̩", "in", "ɛ", "wan", 
+            "wei̯", "yn", "o", "jɛn", "ja", "jʊŋ", "an", 
+            "jou̯", "i", "n", "ɥɛn", "ɔ", "ən", "ɥe",
+            "ʊŋ", "ɻ̩", "ɚ", "əŋ", "waŋ", "u", "wo", 
+            "ai̯", "wa", "jau̯", "ou̯", "ei̯"
         ]
-        tones = [
-            "˧˩˧", "˧˧˥", "˧˩", "˩˧", "˥˧", "˥˩", "˧˥", "˥", "˩", "˧", "˩",
+        self.tones = [
+            "˥", "˧˩˧", "˥˩", "˧˥"
         ]
 
-        phonemes = initials + rhymes + tones
+        self.others = [
+            "0", "1", "2", "3", "4", "5", "6", 
+            "7", "8", "9", "!", "@", "#", "$", 
+            "%", "^", "&", "*", "(", ")", "'",
+            "\"", "-", "=", "[", "]", "{", "}",
+            "|", "\\", ":", ";", "<", ">", "/",
+            "?", ".", ",", "_", "。", "·"
+        ]
+
+        phonemes = self.initials + self.rhymes + self.tones + self.others
         self.id2label = {idx: phoneme for idx, phoneme in enumerate(self.specials + phonemes)}
         self.label2id = {phoneme: idx for idx, phoneme in enumerate(self.specials + phonemes)}
 

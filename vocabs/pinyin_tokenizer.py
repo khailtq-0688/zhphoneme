@@ -4,6 +4,7 @@ from pypinyin import pinyin, Style
 from configs.pinyin_bert_config import PinyinBertConfig
 from .hanzi_processing import HanziProcessor
 
+import re
 from typing import *
 import random
 from collections import OrderedDict
@@ -37,10 +38,8 @@ class PinyinTokenizer:
 
     def create_attention_mask(self, ids: torch.Tensor):
         ids = ids[:, 0]
-        padding_mask = (ids == self.config.pad_token_id)
-        cls_mask = (ids == self.config.cls_token_id)
-        mask = torch.logical_or(padding_mask, cls_mask)
-        mask = 1 - mask.long() # revert the mask, 0 masking while 1 for not masking
+        mask = (ids == self.config.pad_token_id).float()
+        mask = 1 - mask.long() # revert the mask, 1 for real tokens (not padding) while 0 for padding tokens
 
         return mask
     
@@ -56,13 +55,33 @@ class PinyinTokenizer:
                     input_ids[idx+1, :] = self.config.mask_token_id
 
         return input_ids, labels
+    
+    def normalize(self, text: str):
+        text = text.strip().lower()
+
+        text = re.sub("？", "?", text)
+        text = re.sub("！", "!", text)
+        text = re.sub("……", "…", text)
+        text = re.sub("...", "…", text)
+        text = re.sub("，", ",", text)
+        text = re.sub("；", ";", text)
+        text = re.sub("：", ":", text)
+        text = re.sub("“", "\"", text)
+        text = re.sub("‘", "'", text)
+        text = re.sub("（", "(", text)
+        text = re.sub("）", ")", text)
+        text = re.sub("—", "-", text)
+        text = re.sub(r"[《》〈〉「」『』※♂♀℃]", "", text)
+
+        text = text[:self.config.max_length]
+
+        return text
 
     def encode(self, sentence: str) -> torch.Tensor:
         # truncate the sentence
-        sentence = sentence.strip().lower()
-        sentence = sentence[:self.config.max_length]
+        sentence = self.normalize(sentence)
         syllables = [
-            (self.config.cls_token_id, self.config.cls_token_id, self.config.cls_token_id)
+            (self.config.cls_token_id, ) * 3
         ]
         pinyin_words = pinyin(sentence, style=Style.TONE3)
         for pinyin_word in pinyin_words:
@@ -82,6 +101,11 @@ class PinyinTokenizer:
                     )
 
         vec = torch.tensor(syllables).long()
+
+        if vec.max() == 114:
+            print(sentence)
+            print(syllables)
+            raise
 
         return vec
     
