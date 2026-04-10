@@ -12,8 +12,7 @@ from tqdm import tqdm
 import os
 
 EPOCHS = 150
-BS = 4
-WARMUP = 24_000
+BS = 512
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
