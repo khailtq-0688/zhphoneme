@@ -108,10 +108,12 @@ class BasePretrainingTask:
         # Setup scheduler with warmup + linear decay
         # Will be properly calculated in training loop with actual total_steps
         self.total_steps = 10000  # Placeholder, will be updated
-        self.warmup_steps = config.training.get('warmup_steps', 1000)
+        self.warmup_steps = None  # Will be calculated as 5% of total_steps
         
         def lr_lambda(current_step):
-            """Learning rate schedule with warmup and linear decay"""
+            """Learning rate schedule with warmup (5% of total) and linear decay"""
+            if self.warmup_steps is None:
+                return 1.0  # No warmup yet
             if current_step < self.warmup_steps:
                 return float(current_step) / float(max(1, self.warmup_steps))
             return max(0.0, float(self.total_steps - current_step) / float(max(1, self.total_steps - self.warmup_steps)))
@@ -216,9 +218,13 @@ class MLMPretrainingTask(BasePretrainingTask):
         
         # Calculate and set actual total steps for scheduler
         self.total_steps = len(train_dataloader) * num_epochs
+        self.warmup_steps = int(self.total_steps * 0.05)  # 5% of total steps
+        
         self.logger.info(f"Total steps: {self.total_steps}")
-        self.logger.info(f"Warmup steps: {self.warmup_steps}")
+        self.logger.info(f"Warmup steps: {self.warmup_steps} (5% of total)")
         self.logger.info(f"Batch size: {self.config.training.get('batch_size', 32)}")
+        self.logger.info(f"Learning rate: {self.config.training.get('learning_rate', 6e-4)}")
+        self.logger.info(f"Scheduler: LambdaLR with linear warmup and decay")
         
         for epoch in range(num_epochs):
             self.epoch = epoch

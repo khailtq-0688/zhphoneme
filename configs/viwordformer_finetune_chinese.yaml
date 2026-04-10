@@ -35,7 +35,7 @@ training:
   eps: 1e-6
   batch_size: 512
   num_epochs: 5
-  warmup_steps: 24000
+  # warmup_steps will be calculated as 5% of total_steps dynamically
   scheduler: lambda
   gradient_accumulation_steps: 2
   gradient_clip_norm: 1.0

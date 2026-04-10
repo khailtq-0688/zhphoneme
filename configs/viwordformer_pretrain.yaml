@@ -58,8 +58,7 @@ training:
   num_epochs: 5
   num_workers: 4
   
-  # Warmup with linear decay
-  warmup_steps: 24000
+  # Warmup will be calculated as 5% of total_steps dynamically
   
   # Checkpointing
   checkpoint_dir: "./checkpoints"

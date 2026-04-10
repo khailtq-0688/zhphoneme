@@ -20,7 +20,7 @@ from data_processing.data_processor import VietnameseProcessor
 # Configuration
 EPOCHS = 5
 BS = 512
-WARMUP_STEPS = 24_000
+# Warmup steps will be calculated as 5% of total_steps dynamically
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 print(f"Using device: {device}")
@@ -86,11 +86,11 @@ print(f"✓ Optimizer: AdamW(lr={config.training.learning_rate}, weight_decay=0.
 
 # Calculate total steps and initialize scheduler
 total_steps = len(dataloader) * EPOCHS
-warmup_steps = WARMUP_STEPS  # Fixed warmup steps
+warmup_steps = int(total_steps * 0.05)  # 5% of total steps
 
 print(f"\nScheduler configuration:")
 print(f"  Total steps: {total_steps}")
-print(f"  Warmup steps: {warmup_steps}")
+print(f"  Warmup steps: {warmup_steps} (5% of total)")
 
 def lr_lambda(current_step):
     """Learning rate schedule with linear warmup and linear decay"""
