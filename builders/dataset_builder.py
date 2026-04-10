@@ -114,3 +114,17 @@ def build_dataset(config: Dict[str, Any], tokenizer, split: str = 'train'):
         )
     else:
         raise ValueError(f"Unknown dataset type: {dataset_type}")
+
+
+def collate_fn(batch):
+    """
+    Collate function for DataLoader
+    Stack tensors into batches
+    """
+    input_ids = torch.stack([item['input_ids'] for item in batch])
+    labels = torch.stack([item['labels'] for item in batch])
+    
+    return {
+        'input_ids': input_ids,
+        'labels': labels,
+    }

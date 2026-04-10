@@ -5,7 +5,7 @@ Similar to BaseTask in ViWordFormer but for pretraining objectives
 
 import torch
 import torch.nn as nn
-from torch.utils.data import DataLoader, RandomSampler
+from torch.utils.data import DataLoader
 from torch.optim import Adam, AdamW
 from torch.optim.lr_scheduler import LinearLR, CosineAnnealingLR, LambdaLR
 from pathlib import Path
@@ -120,6 +120,8 @@ class BasePretrainingTask:
     
     def load_dataset(self, config) -> DataLoader:
         """Load dataset and create dataloader"""
+        from builders.dataset_builder import collate_fn
+        
         dataset = build_dataset(
             config.training.get('dataset', {}),
             self.tokenizer,
@@ -129,8 +131,9 @@ class BasePretrainingTask:
         dataloader = DataLoader(
             dataset,
             batch_size=config.training.get('batch_size', 32),
-            sampler=RandomSampler(dataset),
+            shuffle=True,
             num_workers=config.training.get('num_workers', 4),
+            collate_fn=collate_fn,
             pin_memory=True if self.device.type == 'cuda' else False,
         )
         
@@ -215,6 +218,7 @@ class MLMPretrainingTask(BasePretrainingTask):
         self.total_steps = len(train_dataloader) * num_epochs
         self.logger.info(f"Total steps: {self.total_steps}")
         self.logger.info(f"Warmup steps: {self.warmup_steps}")
+        self.logger.info(f"Batch size: {self.config.training.get('batch_size', 32)}")
         
         for epoch in range(num_epochs):
             self.epoch = epoch
@@ -223,7 +227,7 @@ class MLMPretrainingTask(BasePretrainingTask):
             self.logger.info(f"{'='*60}")
             
             train_loss = self._train_epoch(train_dataloader)
-            self.logger.info(f"Epoch {epoch + 1} - Train Loss: {train_loss:.4f}")
+            self.logger.info(f"Epoch {epoch + 1} - Average Loss: {train_loss:.4f}")
             
             # Save checkpoint
             self.save_checkpoint(tag=f'epoch_{epoch + 1}')
@@ -232,53 +236,45 @@ class MLMPretrainingTask(BasePretrainingTask):
             if train_loss < self.best_loss:
                 self.best_loss = train_loss
                 self.save_checkpoint(tag='best')
-                self.logger.info(f"Best loss improved to {self.best_loss:.4f}")
+                self.logger.info(f"✓ Best loss improved to {self.best_loss:.4f}")
         
         self.logger.info("\n" + "="*60)
         self.logger.info("Training complete!")
         self.logger.info("="*60)
     
     def _train_epoch(self, dataloader: DataLoader) -> float:
-        """Train for one epoch"""
+        """Train for one epoch - simplified pattern"""
         self.model.train()
         total_loss = 0.0
         
         progress_bar = tqdm(dataloader, desc=f'Epoch {self.epoch + 1} Training', leave=True)
         
-        for batch_idx, batch in enumerate(progress_bar):
+        for batch in progress_bar:
             input_ids = batch['input_ids'].to(self.device)
             labels = batch['labels'].to(self.device)
             
             # Forward pass
+            self.optimizer.zero_grad()
             logits, loss, attentions = self.model(input_ids, labels)
             
             # Backward pass
             loss.backward()
             
-            # Gradient accumulation
-            grad_accum_steps = self.config.training.get('gradient_accumulation_steps', 1)
-            if (batch_idx + 1) % grad_accum_steps == 0:
-                # Gradient clipping
-                torch.nn.utils.clip_grad_norm_(
-                    self.model.parameters(),
-                    self.config.training.get('gradient_clip_val', 1.0)
-                )
-                
-                # Optimizer step
-                self.optimizer.step()
-                self.optimizer.zero_grad()
-                
-                if self.scheduler is not None:
-                    self.scheduler.step()
-                
-                self.global_step += 1
-                
-                # Logging
-                log_steps = self.config.training.get('log_steps', 100)
-                if self.global_step % log_steps == 0:
-                    avg_loss = total_loss / (batch_idx + 1)
-                    progress_bar.set_postfix({'loss': avg_loss, 'step': self.global_step})
+            # Gradient clipping
+            torch.nn.utils.clip_grad_norm_(
+                self.model.parameters(),
+                self.config.training.get('gradient_clip_norm', 1.0)
+            )
             
+            # Optimizer & Scheduler step
+            self.optimizer.step()
+            self.scheduler.step()
+            
+            self.global_step += 1
             total_loss += loss.item()
+            
+            # Update progress bar with loss
+            progress_bar.set_postfix({'loss': f"{loss.item():.4f}"})
         
-        return total_loss / len(dataloader)
+        avg_loss = total_loss / len(dataloader)
+        return avg_loss
