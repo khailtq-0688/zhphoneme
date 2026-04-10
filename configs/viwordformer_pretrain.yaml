@@ -45,19 +45,21 @@ training:
   
   # Optimization
   optimizer: adamw
-  scheduler: linear
-  learning_rate: 0.0001
+  scheduler: lambda
+  learning_rate: 6e-4
   weight_decay: 0.01
+  betas: [0.9, 0.98]
+  eps: 1e-6
   gradient_clip_val: 1.0
   gradient_accumulation_steps: 1
   
   # Training parameters
-  batch_size: 32
-  num_epochs: 3
+  batch_size: 512
+  num_epochs: 5
   num_workers: 4
   
-  # Warmup (if using warmup scheduler)
-  warmup_steps: 10000
+  # Warmup with linear decay
+  warmup_steps: 24000
   
   # Checkpointing
   checkpoint_dir: "./checkpoints"

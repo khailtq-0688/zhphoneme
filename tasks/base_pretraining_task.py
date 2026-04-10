@@ -7,7 +7,7 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, RandomSampler
 from torch.optim import Adam, AdamW
-from torch.optim.lr_scheduler import LinearLR, CosineAnnealingLR
+from torch.optim.lr_scheduler import LinearLR, CosineAnnealingLR, LambdaLR
 from pathlib import Path
 import os
 import json
@@ -86,13 +86,18 @@ class BasePretrainingTask:
     def _setup_optimizer(self, config):
         """Setup optimizer and learning rate scheduler"""
         optimizer_type = config.training.get('optimizer', 'adamw').lower()
-        learning_rate = config.training.get('learning_rate', 1e-4)
+        learning_rate = config.training.get('learning_rate', 6e-4)
+        weight_decay = config.training.get('weight_decay', 0.01)
+        betas = config.training.get('betas', (0.9, 0.98))
+        eps = config.training.get('eps', 1e-6)
         
         if optimizer_type == 'adamw':
             self.optimizer = AdamW(
                 self.model.parameters(),
                 lr=learning_rate,
-                weight_decay=config.training.get('weight_decay', 0.01)
+                weight_decay=weight_decay,
+                betas=betas,
+                eps=eps
             )
         else:
             self.optimizer = Adam(
@@ -100,25 +105,18 @@ class BasePretrainingTask:
                 lr=learning_rate
             )
         
-        # Setup scheduler
-        scheduler_type = config.training.get('scheduler', 'linear').lower()
-        num_epochs = config.training.get('num_epochs', 3)
+        # Setup scheduler with warmup + linear decay
+        # Will be properly calculated in training loop with actual total_steps
+        self.total_steps = 10000  # Placeholder, will be updated
+        self.warmup_steps = config.training.get('warmup_steps', 1000)
         
-        # Approximate total steps (will be updated in training loop)
-        total_steps = 10000  # Placeholder, will be calculated
+        def lr_lambda(current_step):
+            """Learning rate schedule with warmup and linear decay"""
+            if current_step < self.warmup_steps:
+                return float(current_step) / float(max(1, self.warmup_steps))
+            return max(0.0, float(self.total_steps - current_step) / float(max(1, self.total_steps - self.warmup_steps)))
         
-        if scheduler_type == 'linear':
-            self.scheduler = LinearLR(
-                self.optimizer,
-                start_factor=1.0,
-                end_factor=0.0,
-                total_iters=total_steps
-            )
-        else:
-            self.scheduler = CosineAnnealingLR(
-                self.optimizer,
-                T_max=total_steps
-            )
+        self.scheduler = LambdaLR(self.optimizer, lr_lambda)
     
     def load_dataset(self, config) -> DataLoader:
         """Load dataset and create dataloader"""
@@ -213,10 +211,10 @@ class MLMPretrainingTask(BasePretrainingTask):
         self.logger.info("Loading dataset...")
         train_dataloader = self.load_dataset(self.config)
         
-        # Update scheduler with actual total steps
-        total_steps = len(train_dataloader) * num_epochs
-        if hasattr(self.scheduler, 'total_iters'):
-            self.scheduler.total_iters = total_steps
+        # Calculate and set actual total steps for scheduler
+        self.total_steps = len(train_dataloader) * num_epochs
+        self.logger.info(f"Total steps: {self.total_steps}")
+        self.logger.info(f"Warmup steps: {self.warmup_steps}")
         
         for epoch in range(num_epochs):
             self.epoch = epoch

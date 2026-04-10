@@ -29,12 +29,14 @@ data_paths:
 
 training:
   optimizer: adamw
-  learning_rate: 0.00005  # Lower learning rate for fine-tuning
+  learning_rate: 6e-4
   weight_decay: 0.01
-  batch_size: 16  # Can be reduced if running out of memory
-  num_epochs: 1
-  warmup_steps: 500
-  scheduler: linear
+  betas: [0.9, 0.98]
+  eps: 1e-6
+  batch_size: 512
+  num_epochs: 5
+  warmup_steps: 24000
+  scheduler: lambda
   gradient_accumulation_steps: 2
   gradient_clip_norm: 1.0
   save_steps: 1000
