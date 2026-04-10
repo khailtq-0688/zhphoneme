@@ -17,10 +17,10 @@ BS = 512
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
 config = PinyinBertConfig(
-    hidden_size=768,
-    num_hidden_layers=12,
-    num_attention_heads=12,
-    intermediate_size=3072,
+    hidden_size=1023,
+    num_hidden_layers=24,
+    num_attention_heads=16,
+    intermediate_size=4096,
     hidden_act="gelu",
     hidden_dropout_prob=0.1,
     attention_probs_dropout_prob=0.1,
@@ -85,4 +85,4 @@ for epoch in range(1, EPOCHS + 1):
 print("Saving the pretrained model")
 if not os.path.isdir("pinyin_bert_weights"):
     os.mkdir("pinyin_bert_weights")
-torch.save(model, "pinyin_bert_weights/pinyin_bert_base.pth")
+torch.save(model, "pinyin_bert_weights/pinyin_bert_large.pth")
