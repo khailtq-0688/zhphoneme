@@ -5,9 +5,9 @@ Similar to BaseTask in ViWordFormer but for pretraining objectives
 
 import torch
 import torch.nn as nn
-from torch.utils.data import DataLoader, RandomSampler
+from torch.utils.data import DataLoader
 from torch.optim import Adam, AdamW
-from torch.optim.lr_scheduler import LinearLR, CosineAnnealingLR
+from torch.optim.lr_scheduler import LinearLR, CosineAnnealingLR, LambdaLR
 from pathlib import Path
 import os
 import json
@@ -86,13 +86,18 @@ class BasePretrainingTask:
     def _setup_optimizer(self, config):
         """Setup optimizer and learning rate scheduler"""
         optimizer_type = config.training.get('optimizer', 'adamw').lower()
-        learning_rate = config.training.get('learning_rate', 1e-4)
+        learning_rate = config.training.get('learning_rate', 6e-4)
+        weight_decay = config.training.get('weight_decay', 0.01)
+        betas = config.training.get('betas', (0.9, 0.98))
+        eps = config.training.get('eps', 1e-6)
         
         if optimizer_type == 'adamw':
             self.optimizer = AdamW(
                 self.model.parameters(),
                 lr=learning_rate,
-                weight_decay=config.training.get('weight_decay', 0.01)
+                weight_decay=weight_decay,
+                betas=betas,
+                eps=eps
             )
         else:
             self.optimizer = Adam(
@@ -100,28 +105,25 @@ class BasePretrainingTask:
                 lr=learning_rate
             )
         
-        # Setup scheduler
-        scheduler_type = config.training.get('scheduler', 'linear').lower()
-        num_epochs = config.training.get('num_epochs', 3)
+        # Setup scheduler with warmup + linear decay
+        # Will be properly calculated in training loop with actual total_steps
+        self.total_steps = 10000  # Placeholder, will be updated
+        self.warmup_steps = None  # Will be calculated as 5% of total_steps
         
-        # Approximate total steps (will be updated in training loop)
-        total_steps = 10000  # Placeholder, will be calculated
+        def lr_lambda(current_step):
+            """Learning rate schedule with warmup (5% of total) and linear decay"""
+            if self.warmup_steps is None:
+                return 1.0  # No warmup yet
+            if current_step < self.warmup_steps:
+                return float(current_step) / float(max(1, self.warmup_steps))
+            return max(0.0, float(self.total_steps - current_step) / float(max(1, self.total_steps - self.warmup_steps)))
         
-        if scheduler_type == 'linear':
-            self.scheduler = LinearLR(
-                self.optimizer,
-                start_factor=1.0,
-                end_factor=0.0,
-                total_iters=total_steps
-            )
-        else:
-            self.scheduler = CosineAnnealingLR(
-                self.optimizer,
-                T_max=total_steps
-            )
+        self.scheduler = LambdaLR(self.optimizer, lr_lambda)
     
     def load_dataset(self, config) -> DataLoader:
         """Load dataset and create dataloader"""
+        from builders.dataset_builder import collate_fn
+        
         dataset = build_dataset(
             config.training.get('dataset', {}),
             self.tokenizer,
@@ -131,8 +133,9 @@ class BasePretrainingTask:
         dataloader = DataLoader(
             dataset,
             batch_size=config.training.get('batch_size', 32),
-            sampler=RandomSampler(dataset),
+            shuffle=True,
             num_workers=config.training.get('num_workers', 4),
+            collate_fn=collate_fn,
             pin_memory=True if self.device.type == 'cuda' else False,
         )
         
@@ -213,10 +216,15 @@ class MLMPretrainingTask(BasePretrainingTask):
         self.logger.info("Loading dataset...")
         train_dataloader = self.load_dataset(self.config)
         
-        # Update scheduler with actual total steps
-        total_steps = len(train_dataloader) * num_epochs
-        if hasattr(self.scheduler, 'total_iters'):
-            self.scheduler.total_iters = total_steps
+        # Calculate and set actual total steps for scheduler
+        self.total_steps = len(train_dataloader) * num_epochs
+        self.warmup_steps = int(self.total_steps * 0.05)  # 5% of total steps
+        
+        self.logger.info(f"Total steps: {self.total_steps}")
+        self.logger.info(f"Warmup steps: {self.warmup_steps} (5% of total)")
+        self.logger.info(f"Batch size: {self.config.training.get('batch_size', 32)}")
+        self.logger.info(f"Learning rate: {self.config.training.get('learning_rate', 6e-4)}")
+        self.logger.info(f"Scheduler: LambdaLR with linear warmup and decay")
         
         for epoch in range(num_epochs):
             self.epoch = epoch
@@ -225,7 +233,7 @@ class MLMPretrainingTask(BasePretrainingTask):
             self.logger.info(f"{'='*60}")
             
             train_loss = self._train_epoch(train_dataloader)
-            self.logger.info(f"Epoch {epoch + 1} - Train Loss: {train_loss:.4f}")
+            self.logger.info(f"Epoch {epoch + 1} - Average Loss: {train_loss:.4f}")
             
             # Save checkpoint
             self.save_checkpoint(tag=f'epoch_{epoch + 1}')
@@ -234,53 +242,45 @@ class MLMPretrainingTask(BasePretrainingTask):
             if train_loss < self.best_loss:
                 self.best_loss = train_loss
                 self.save_checkpoint(tag='best')
-                self.logger.info(f"Best loss improved to {self.best_loss:.4f}")
+                self.logger.info(f"✓ Best loss improved to {self.best_loss:.4f}")
         
         self.logger.info("\n" + "="*60)
         self.logger.info("Training complete!")
         self.logger.info("="*60)
     
     def _train_epoch(self, dataloader: DataLoader) -> float:
-        """Train for one epoch"""
+        """Train for one epoch - simplified pattern"""
         self.model.train()
         total_loss = 0.0
         
         progress_bar = tqdm(dataloader, desc=f'Epoch {self.epoch + 1} Training', leave=True)
         
-        for batch_idx, batch in enumerate(progress_bar):
+        for batch in progress_bar:
             input_ids = batch['input_ids'].to(self.device)
             labels = batch['labels'].to(self.device)
             
             # Forward pass
+            self.optimizer.zero_grad()
             logits, loss, attentions = self.model(input_ids, labels)
             
             # Backward pass
             loss.backward()
             
-            # Gradient accumulation
-            grad_accum_steps = self.config.training.get('gradient_accumulation_steps', 1)
-            if (batch_idx + 1) % grad_accum_steps == 0:
-                # Gradient clipping
-                torch.nn.utils.clip_grad_norm_(
-                    self.model.parameters(),
-                    self.config.training.get('gradient_clip_val', 1.0)
-                )
-                
-                # Optimizer step
-                self.optimizer.step()
-                self.optimizer.zero_grad()
-                
-                if self.scheduler is not None:
-                    self.scheduler.step()
-                
-                self.global_step += 1
-                
-                # Logging
-                log_steps = self.config.training.get('log_steps', 100)
-                if self.global_step % log_steps == 0:
-                    avg_loss = total_loss / (batch_idx + 1)
-                    progress_bar.set_postfix({'loss': avg_loss, 'step': self.global_step})
+            # Gradient clipping
+            torch.nn.utils.clip_grad_norm_(
+                self.model.parameters(),
+                self.config.training.get('gradient_clip_norm', 1.0)
+            )
             
+            # Optimizer & Scheduler step
+            self.optimizer.step()
+            self.scheduler.step()
+            
+            self.global_step += 1
             total_loss += loss.item()
+            
+            # Update progress bar with loss
+            progress_bar.set_postfix({'loss': f"{loss.item():.4f}"})
         
-        return total_loss / len(dataloader)
+        avg_loss = total_loss / len(dataloader)
+        return avg_loss
