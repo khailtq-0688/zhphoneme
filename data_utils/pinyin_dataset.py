@@ -44,8 +44,8 @@ class PinyinDataset(Dataset):
 
     def __getitem__(self, idx):
         # the default format for the corpus file of each line if line_<idx>.txt
-        with open(os.path.join(self.corpus_dir, f"line_{idx}.txt"), "w+") as file:
-            text = file.read()
+        with open(os.path.join(self.corpus_dir, f"line_{idx}.txt")) as file:
+            text = file.readline()
 
         encoded_text = self.tokenizer.tokenize(text)
 

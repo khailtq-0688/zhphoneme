@@ -28,20 +28,21 @@ class PinyinBert(PreTrainedModel):
         
         # 4. HÀM LOSS CHUNG
         self.loss_fn = nn.CrossEntropyLoss(ignore_index=self.config.pad_token_id)
-        self.init_weights()
+
+        self.initialize_weights()
 
     def forward(self, input_ids, attention_mask=None, labels=None):
         bs, len, _ = input_ids.shape
         inputs_embeds = self.shared_embeddings(input_ids) # (bs, len, 3, dim/3)
         inputs_embeds = inputs_embeds.reshape(bs, len, -1) # (bs, len, dim)
-        
+
         outputs = self.bert(inputs_embeds=inputs_embeds, attention_mask=attention_mask)
         sequence_output = outputs.last_hidden_state # (B, L, 768)
         
         # Đi qua 3 FC Heads
         logit_onset = self.fc_onset(sequence_output) # (B, L, Vocab_size)
         logit_rhyme = self.fc_rhyme(sequence_output)
-        logit_tone  = self.fc_tone(sequence_output) 
+        logit_tone  = self.fc_tone(sequence_output)
         
         logits = torch.stack([logit_onset, logit_rhyme, logit_tone], dim=2) # (B, L, 3, Vocab_size)
         

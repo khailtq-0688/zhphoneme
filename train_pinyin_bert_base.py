@@ -9,9 +9,10 @@ from models.pinyin_bert import PinyinBert
 from data_utils.pinyin_dataset import collate_fn
 
 from tqdm import tqdm
+import os
 
-EPOCHS = 5
-BS = 512
+EPOCHS = 150
+BS = 4
 WARMUP = 24_000
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -25,19 +26,22 @@ config = PinyinBertConfig(
     hidden_dropout_prob=0.1,
     attention_probs_dropout_prob=0.1,
     max_position_embeddings=512,
-    max_length=512,
-    type_vocab_size=1
+    max_length=512, # config for baidubaike pretrained corpus
+    type_vocab_size=1,
+    is_decoder=False,
+    add_cross_attention = False
 )
 tokenizer = PinyinTokenizer(config)
 dataset = PinyinDataset(
     tokenizer=tokenizer, 
-    corpus_file="data/baidubaike_corpus.txt", 
+    corpus_dir="../Chinese-pretrained-corpus/baidubaike_corpus", 
     max_length=config.max_length
 )
 dataloader = DataLoader(
     dataset=dataset,
     batch_size=BS,
     shuffle=True,
+    num_workers=4,
     collate_fn=collate_fn
 )
 model = PinyinBert(config).to(device)
@@ -51,7 +55,7 @@ print(f"Total steps: {total_steps}")
 
 def lr_lambda(current_step):
     if current_step < warmup_steps:
-        return float(current_step) / float(max(1, warmup_steps))
+        return float(current_step) / float(max(1, warmup_steps)) 
     return max(0.0, float(total_steps - current_step) / float(max(1, total_steps - warmup_steps)))
     
 lr_scheduler = LambdaLR(optimizer, lr_lambda)
@@ -79,4 +83,7 @@ for epoch in range(1, EPOCHS + 1):
     avg_loss = total_loss / len(dataloader)
     print(f"Epoch {epoch} - Average Loss: {avg_loss:.4f}")
 
-print("Training Complete!")
+print("Saving the pretrained model")
+if not os.path.isdir("pinyin_bert_weights"):
+    os.mkdir("pinyin_bert_base")
+torch.save(model, "pinyin_bert_base/pinyin_bert_base.pth")

@@ -73,8 +73,6 @@ class PinyinTokenizer:
         text = re.sub("—", "-", text)
         text = re.sub(r"[《》〈〉「」『』※♂♀℃]", "", text)
 
-        text = text[:self.config.max_length]
-
         return text
 
     def encode(self, sentence: str) -> torch.Tensor:
@@ -101,11 +99,8 @@ class PinyinTokenizer:
                     )
 
         vec = torch.tensor(syllables).long()
-
-        if vec.max() == 114:
-            print(sentence)
-            print(syllables)
-            raise
+        # truncate the input
+        vec = vec[:self.config.max_length]
 
         return vec
     
