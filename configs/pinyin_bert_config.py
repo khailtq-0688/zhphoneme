@@ -64,7 +64,7 @@ class PinyinBertConfig(PretrainedConfig):
             "au̯", "y", "wən", "ɤ", "jaŋ", "je","aŋ", 
             "wai̯", "iŋ", "a", "ɹ̩", "in", "ɛ", "wan", 
             "wei̯", "yn", "o", "jɛn", "ja", "jʊŋ", "an", 
-            "jou̯", "i", "n", "ɥɛn", "ɔ", "ən", "ɥe",
+            "jou̯", "i", "ɥɛn", "ɔ", "ən", "ɥe",
             "ʊŋ", "ɻ̩", "ɚ", "əŋ", "waŋ", "u", "wo", 
             "ai̯", "wa", "jau̯", "ou̯", "ei̯"
         ]
