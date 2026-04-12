@@ -52,48 +52,13 @@ pip install torch-cuda  # or appropriate CUDA version
 
 ## Training
 
-### Chinese Corpus (Baidu Baike format)
-
-For corpus with `subset_*.txt` file structure (each file ~1000 lines):
-
 ```bash
-python main.py train-chinese \
-  --config configs/viwordformer_pretrain_chinese_subset.yaml \
-  --corpus-dir ../../baidubaike_chinese
+# Chinese
+python main.py train-chinese --corpus-dir ../../baidubaike_chinese
+
+# Vietnamese
+python main.py train-vietnamese --corpus-dir ../../vietnamese_curated
 ```
-
-Or directly:
-
-```bash
-python pretrain_chinese_subset.py \
-  --config configs/viwordformer_pretrain_chinese_subset.yaml \
-  --corpus-dir ../../baidubaike_chinese
-```
-
-### Vietnamese Corpus (Curated format)
-
-For corpus with `subset_*.txt` file structure (each file ~1000 lines):
-
-```bash
-python main.py train-vietnamese \
-  --config configs/viwordformer_pretrain_vietnamese_subset.yaml \
-  --corpus-dir ../../vietnamese_curated
-```
-
-Or directly:
-
-```bash
-python pretrain_vietnamese_subset.py \
-  --config configs/viwordformer_pretrain_vietnamese_subset.yaml \
-  --corpus-dir ../../vietnamese_curated
-```
-
-### Options
-
-- `--config PATH`: Path to training config (default: configs/viwordformer_pretrain_chinese_subset.yaml)
-- `--corpus-dir PATH`: Path to corpus directory (default: ../../baidubaike_chinese)
-- `--resume PATH`: Resume from checkpoint
-- `--no-tokenizer`: Skip tokenizer training if already trained
 
 ## Configuration
 
