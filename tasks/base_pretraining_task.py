@@ -205,16 +205,24 @@ class MLMPretrainingTask(BasePretrainingTask):
     def __init__(self, config):
         super().__init__(config)
     
-    def train(self, num_epochs: Optional[int] = None):
-        """Training loop for MLM"""
+    def train(self, num_epochs: Optional[int] = None, train_dataloader: Optional['DataLoader'] = None):
+        """Training loop for MLM
+        
+        Args:
+            num_epochs: Number of epochs to train
+            train_dataloader: Optional pre-built DataLoader. If None, will be loaded from config
+        """
         if num_epochs is None:
             num_epochs = self.config.training.get('num_epochs', 3)
         
         self.logger.info(f"Starting MLM pretraining for {num_epochs} epochs")
         
-        # Load dataset
-        self.logger.info("Loading dataset...")
-        train_dataloader = self.load_dataset(self.config)
+        # Load dataset if not provided
+        if train_dataloader is None:
+            self.logger.info("Loading dataset...")
+            train_dataloader = self.load_dataset(self.config)
+        else:
+            self.logger.info("Using provided DataLoader")
         
         # Calculate and set actual total steps for scheduler
         self.total_steps = len(train_dataloader) * num_epochs
