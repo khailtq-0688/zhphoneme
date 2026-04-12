@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
 Chinese Independent Pretraining Script (Subset Format)
-Trains a ViWordFormer model from scratch on Chinese Baidu Baike dataset
-Uses subset_*.txt file structure (each with ~1000 lines)
+Trains a ViWordFormer model from scratch on all Chinese Baidu Baike subset files
+Treats subset_*.txt files as one continuous corpus transparently
 """
 
 import sys
@@ -54,25 +54,25 @@ def load_config(config_path: str):
         return config
 
 
-def train_tokenizer_chinese(config, corpus_dir):
-    """Train tokenizer on Chinese subset data"""
+def train_tokenizer_on_subset_files(config, corpus_dir):
+    """Train tokenizer on all subset files"""
     tokenizer_config = config.get('tokenizer', {})
     model_prefix = tokenizer_config.get('model_prefix', './tokenizers/unigram_tokenizer_chinese_subset')
     
     model_file = f"{model_prefix}.model"
     if Path(model_file).exists():
-        logger.info(f"Chinese tokenizer already exists at {model_file}")
+        logger.info(f"Tokenizer already exists at {model_file}")
         return model_prefix
     
     logger.info("="*60)
-    logger.info("Training Chinese Tokenizer on Subset Data")
+    logger.info("Training Tokenizer on All Subset Files")
     logger.info("="*60)
     
     vocab_size = tokenizer_config.get('vocab_size', 30000)
     
-    # Merge all subset files into a temporary training file
+    # Create temporary merged file for tokenizer training
     temp_training_file = Path(corpus_dir) / 'tokenizer_training.txt'
-    logger.info(f"Merging subset files for tokenizer training...")
+    logger.info(f"Merging all subset files for tokenizer training...")
     
     with open(temp_training_file, 'w', encoding='utf-8') as out_f:
         for filename in sorted(os.listdir(corpus_dir)):
@@ -82,7 +82,7 @@ def train_tokenizer_chinese(config, corpus_dir):
                     for line in in_f:
                         out_f.write(line)
     
-    logger.info(f"Training Chinese tokenizer (vocab_size={vocab_size})")
+    logger.info(f"Training tokenizer (vocab_size={vocab_size})")
     
     tokenizer = UnigramTokenizer(
         model_prefix=model_prefix,
@@ -99,17 +99,17 @@ def train_tokenizer_chinese(config, corpus_dir):
     # Clean up temporary file
     temp_training_file.unlink()
     
-    logger.info(f"✓ Chinese tokenizer saved to {model_prefix}")
+    logger.info(f"✓ Tokenizer saved to {model_prefix}")
     return model_prefix
 
 
 def main():
-    parser = ArgumentParser(description='Chinese Subset Independent Pretraining for ViWordFormer')
+    parser = ArgumentParser(description='Chinese Pretraining on Subset Format Corpus')
     parser.add_argument(
         '--config',
         type=str,
-        default='./configs/viwordformer_pretrain_chinese.yaml',
-        help='Path to config file (YAML or JSON)'
+        default='./configs/viwordformer_pretrain_chinese_subset.yaml',
+        help='Path to config file'
     )
     parser.add_argument(
         '--corpus-dir',
@@ -150,12 +150,13 @@ def main():
     if not corpus_dir.exists():
         raise FileNotFoundError(f"Corpus directory not found: {corpus_dir}")
     
+    subset_files = list(corpus_dir.glob('subset_*.txt'))
     logger.info(f"Corpus directory: {corpus_dir}")
-    logger.info(f"Found {len(list(corpus_dir.glob('subset_*.txt')))} subset files")
+    logger.info(f"Found {len(subset_files)} subset files")
     
     # Train or load tokenizer
     if not args.no_tokenizer:
-        tokenizer_prefix = train_tokenizer_chinese(config, corpus_dir)
+        tokenizer_prefix = train_tokenizer_on_subset_files(config, corpus_dir)
         tokenizer_path = f"{tokenizer_prefix}.model"
     else:
         tokenizer_path = Path('./tokenizers/unigram_tokenizer_chinese_subset.model')
@@ -170,9 +171,9 @@ def main():
     tokenizer.load(str(tokenizer_path))
     logger.info(f"✓ Tokenizer loaded from {tokenizer_path}")
     
-    # Create dataset
+    # Create dataset from all subset files
     logger.info("="*60)
-    logger.info("Creating Dataset from Subset Files")
+    logger.info("Creating SubsetDataset from All Files")
     logger.info("="*60)
     
     dataset = SubsetDataset(
@@ -183,7 +184,7 @@ def main():
         lines_per_file=config.get('dataset', {}).get('lines_per_file', 1000)
     )
     
-    logger.info(f"✓ Dataset created with {len(dataset)} total lines")
+    logger.info(f"✓ SubsetDataset created with {len(dataset)} total samples")
     
     # Create dataloader
     batch_size = config.get('training', {}).get('batch_size', 32)
@@ -195,48 +196,46 @@ def main():
         collate_fn=collate_fn,
         pin_memory=True if device == 'cuda' else False
     )
-    logger.info(f"✓ DataLoader created: {len(dataloader)} batches")
+    logger.info(f"✓ DataLoader created: {len(dataloader)} batches per epoch")
     
-    # Create task and train
+    # Create training task and train
     logger.info("="*60)
-    logger.info("Starting Chinese Subset Independent Pretraining")
+    logger.info("Starting Pretraining on All Subset Files")
     logger.info("="*60)
     
-    # Create config for training
     training_config = dict_to_dotdict({
         'device': device,
         'tokenizer': tokenizer,
-        'data_path': corpus_dir,
         'checkpoint_dir': Path('./checkpoints/chinese_subset_pretrain'),
         'optimizer': config.get('training', {}).get('optimizer', 'adamw'),
-        'learning_rate': config.get('training', {}).get('learning_rate', 0.0001),
+        'learning_rate': config.get('training', {}).get('learning_rate', 6e-4),
         'weight_decay': config.get('training', {}).get('weight_decay', 0.01),
         'betas': tuple(config.get('training', {}).get('betas', [0.9, 0.98])),
         'eps': config.get('training', {}).get('eps', 1e-6),
         'batch_size': batch_size,
-        'num_epochs': config.get('training', {}).get('num_epochs', 3),
+        'num_epochs': config.get('training', {}).get('num_epochs', 5),
         'max_seq_len': config.get('dataset', {}).get('max_seq_len', 512),
         'mlm_probability': config.get('dataset', {}).get('mlm_probability', 0.15),
     })
     
     task = MLMPretrainingTask(training_config)
     
-    # Resume from checkpoint if specified
     if args.resume:
         logger.info(f"Resuming from checkpoint: {args.resume}")
         task.load_checkpoint(args.resume)
     
-    # Train with dataloader
+    # Train with the dataloader
     task.train(
         num_epochs=training_config.num_epochs,
         train_dataloader=dataloader
     )
     
     logger.info("="*60)
-    logger.info("Chinese Subset Independent Pretraining Complete!")
+    logger.info("Pretraining on All Subset Files Complete!")
     logger.info(f"Model saved to {training_config.checkpoint_dir}")
     logger.info("="*60)
 
 
 if __name__ == "__main__":
     main()
+
