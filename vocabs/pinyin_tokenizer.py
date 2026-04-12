@@ -61,8 +61,8 @@ class PinyinTokenizer:
 
         text = re.sub("？", "?", text)
         text = re.sub("！", "!", text)
-        text = re.sub("……", "…", text)
-        text = re.sub("...", "…", text)
+        text = re.sub("…", "", text)
+        text = re.sub(r"\.+", "", text)
         text = re.sub("，", ",", text)
         text = re.sub("；", ";", text)
         text = re.sub("：", ":", text)
@@ -71,12 +71,13 @@ class PinyinTokenizer:
         text = re.sub("（", "(", text)
         text = re.sub("）", ")", text)
         text = re.sub("—", "-", text)
+        text = re.sub("\n", "", text)
         text = re.sub(r"[《》〈〉「」『』※♂♀℃]", "", text)
+        text = re.sub(r"\s+", "", text)
 
         return text
 
     def encode(self, sentence: str) -> torch.Tensor:
-        # truncate the sentence
         sentence = self.normalize(sentence)
         syllables = [
             (self.config.cls_token_id, ) * 3

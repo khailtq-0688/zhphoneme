@@ -33,7 +33,7 @@ config = PinyinBertConfig(
 tokenizer = PinyinTokenizer(config)
 dataset = PinyinDataset(
     tokenizer=tokenizer, 
-    corpus_dir="../Chinese-pretrained-corpus/baidubaike_corpus", 
+    corpus_dir="../Chinese-pretrained-corpus/baidubaike_chinese", 
     max_length=config.max_length
 )
 dataloader = DataLoader(
@@ -62,12 +62,12 @@ lr_scheduler = LambdaLR(optimizer, lr_lambda)
 for epoch in range(1, EPOCHS + 1):
     total_loss = 0
     progress_bar = tqdm(dataloader, desc=f"Epoch {epoch}/{EPOCHS}")
-    
+
     for batch in progress_bar:
         input_ids = batch['input_ids'].to(device)
         attention_mask = batch['attention_mask'].to(device)
         labels = batch['labels'].to(device)
-        
+
         optimizer.zero_grad()
         outputs = model(input_ids, attention_mask=attention_mask, labels=labels)
         
