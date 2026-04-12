@@ -16,11 +16,13 @@ Pretrain ViWordFormer models on Chinese and Vietnamese corpora using Masked Lang
 ## Directory Structure
 
 ```
-├── main.py                          # Entry point
+├── main.py                          # Entry point (supports both languages)
 ├── pretrain_chinese_subset.py       # Train on Chinese corpus
+├── pretrain_vietnamese_subset.py    # Train on Vietnamese corpus
 ├── configs/
 │   ├── viwordformer.yaml            # Original architecture config
-│   └── viwordformer_pretrain_chinese_subset.yaml  # Training config
+│   ├── viwordformer_pretrain_chinese_subset.yaml    # Chinese training config
+│   └── viwordformer_pretrain_vietnamese_subset.yaml # Vietnamese training config
 ├── builders/
 │   ├── dataset_builder.py           # SubsetDataset & collate_fn
 │   ├── model_builder.py             # Model factory
@@ -33,8 +35,8 @@ Pretrain ViWordFormer models on Chinese and Vietnamese corpora using Masked Lang
 ├── tokenizer/
 │   └── unigram_tokenizer.py         # SentencePiece tokenizer
 ├── processors/                      # Data processors
-├── checkpoints/                     # Model checkpoints
-├── tokenizers/                      # Trained tokenizers
+├── checkpoints/                     # Model checkpoints (created at runtime)
+├── tokenizers/                      # Trained tokenizers (created at runtime)
 └── README.md
 ```
 
@@ -66,6 +68,24 @@ Or directly:
 python pretrain_chinese_subset.py \
   --config configs/viwordformer_pretrain_chinese_subset.yaml \
   --corpus-dir ../../baidubaike_chinese
+```
+
+### Vietnamese Corpus (Curated format)
+
+For corpus with `subset_*.txt` file structure (each file ~1000 lines):
+
+```bash
+python main.py train-vietnamese \
+  --config configs/viwordformer_pretrain_vietnamese_subset.yaml \
+  --corpus-dir ../../vietnamese_curated
+```
+
+Or directly:
+
+```bash
+python pretrain_vietnamese_subset.py \
+  --config configs/viwordformer_pretrain_vietnamese_subset.yaml \
+  --corpus-dir ../../vietnamese_curated
 ```
 
 ### Options
@@ -117,6 +137,7 @@ The `SubsetDataset` transparently reads from all files as one continuous corpus:
 
 After training:
 
+### Chinese
 ```
 checkpoints/chinese_subset_pretrain/
 ├── best/
@@ -126,6 +147,18 @@ checkpoints/chinese_subset_pretrain/
 └── ...                    # Checkpoint per epoch
 tokenizers/
 └── unigram_tokenizer_chinese_subset.model
+```
+
+### Vietnamese
+```
+checkpoints/vietnamese_subset_pretrain/
+├── best/
+│   └── model.pt           # Best model weights
+├── epoch_1/
+├── epoch_2/
+└── ...                    # Checkpoint per epoch
+tokenizers/
+└── unigram_tokenizer_vietnamese_subset.model
 ```
 
 ## Training Metrics
