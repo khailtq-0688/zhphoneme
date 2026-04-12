@@ -1,5 +1,9 @@
-# Vietnamese
-python pretrain_vietnamese_independent.py --config configs/viwordformer_pretrain_vietnamese.yaml
-
 # Chinese
-python pretrain_chinese_independent.py --config configs/viwordformer_pretrain_chinese.yaml
+```bash
+python main.py train-chinese --corpus-dir ../../baidubaike_chinese
+```
+
+# Vietnamese
+```bash
+python main.py train-vietnamese --corpus-dir ../../vietnamese_curated
+```

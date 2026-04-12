@@ -3,15 +3,151 @@ Dataset builder for pretraining
 """
 
 from typing import Dict, Any
+import os
 import torch
 from torch.utils.data import Dataset
 from .registry import META_DATASET
 
 
 @META_DATASET.register()
+class SubsetDataset(Dataset):
+    """
+    Dataset for masked language modeling pretraining from subset_*.txt files
+    Structure: corpus_dir/subset_0.txt, subset_1.txt, ..., subset_N.txt
+    Each file has ~1000 lines (configurable via lines_per_file)
+    """
+    
+    def __init__(self, corpus_dir: str, tokenizer, max_seq_len: int = 512, 
+                 mlm_probability: float = 0.15, lines_per_file: int = 1000,
+                 max_cache_files: int = 4000):
+        """
+        Initialize subset dataset
+        
+        Args:
+            corpus_dir: Directory containing subset_*.txt files
+            tokenizer: Tokenizer instance
+            max_seq_len: Maximum sequence length
+            mlm_probability: Probability of masking tokens
+            lines_per_file: Lines per subset file (default 1000)
+        """
+        self.corpus_dir = corpus_dir
+        self.tokenizer = tokenizer
+        self.max_seq_len = max_seq_len
+        self.mlm_probability = mlm_probability
+        self.lines_per_file = lines_per_file
+
+        # Dictionary dùng làm Cache để chống I/O bottleneck
+        self.max_cache_files = max_cache_files
+        self._file_cache = {}
+        
+        # Count total lines across all subset files
+        self.total_lines = self._count_total_lines()
+        
+    def _count_total_lines(self) -> int:
+        """Count total lines across all subset files"""
+        total = 0
+        for filename in sorted(os.listdir(self.corpus_dir)):
+            if filename.startswith('subset_') and filename.endswith('.txt'):
+                filepath = os.path.join(self.corpus_dir, filename)
+                try:
+                    with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
+                        total += sum(1 for line in f if line.strip())
+                except Exception as e:
+                    print(f"Warning: Error reading {filename}: {e}")
+        return total
+    
+    def __len__(self) -> int:
+        return self.total_lines
+    
+    def _get_line_from_file(self, filepath: str, line_idx: int) -> str:
+        """Hàm phụ trợ: Lấy dòng text có sử dụng Cache"""
+        # Nếu file chưa có trong cache, tiến hành đọc từ ổ cứng
+        if filepath not in self._file_cache:
+            # Kiểm tra RAM: Nếu cache đã đầy, xóa file cũ nhất 
+            if len(self._file_cache) >= self.max_cache_files:
+                oldest_filepath = next(iter(self._file_cache))
+                del self._file_cache[oldest_filepath]
+            
+            # Đọc file 1 lần và lưu toàn bộ lines vào RAM
+            try:
+                with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
+                    self._file_cache[filepath] = f.readlines()
+            except Exception as e:
+                print(f"Error reading {filepath}: {e}")
+                self._file_cache[filepath] = []
+        
+        # Trích xuất dòng từ RAM thay vì đọc lại từ ổ cứng
+        lines = self._file_cache[filepath]
+        if line_idx < len(lines):
+            return lines[line_idx].strip()
+        return ""
+    
+    def __getitem__(self, idx: int) -> Dict[str, torch.Tensor]:
+        """Get a single item"""
+        # Calculate which file and which line
+        subset_idx, line_idx = divmod(idx, self.lines_per_file)
+        
+        # Read line from file
+        filepath = os.path.join(self.corpus_dir, f"subset_{subset_idx}.txt")
+
+        text = self._get_line_from_file(filepath, line_idx)
+        
+        if not text:
+            # Return empty sample if text is empty
+            return self._empty_sample()
+        
+        # Tokenize
+        tokens = self.tokenizer.encode(text)
+        
+        # Truncate
+        if len(tokens) > self.max_seq_len - 2:
+            tokens = tokens[:self.max_seq_len - 2]
+        
+        # Add special tokens [BOS] + tokens + [EOS]
+        input_ids = [1] + tokens + [2]
+        
+        # Pad with [PAD] (id=3)
+        if len(input_ids) < self.max_seq_len:
+            input_ids += [3] * (self.max_seq_len - len(input_ids))
+        
+        input_ids = torch.tensor(input_ids, dtype=torch.long)
+        
+        # Create labels (masked language modeling)
+        labels = input_ids.clone()
+        
+        # Randomly select tokens to mask
+        mask_indices = torch.bernoulli(
+            torch.full((self.max_seq_len,), self.mlm_probability)
+        ).bool()
+        
+        # Don't mask special tokens and padding
+        mask_indices[0] = False          # Don't mask [BOS]
+        mask_indices[input_ids == 2] = False  # Don't mask [EOS]
+        mask_indices[input_ids == 3] = False  # Don't mask [PAD]
+        
+        # Apply masking (mask token id is 0)
+        input_ids[mask_indices] = 0
+        
+        return {
+            'input_ids': input_ids,
+            'labels': labels,
+        }
+    
+    def _empty_sample(self) -> Dict[str, torch.Tensor]:
+        """Return empty sample filled with padding"""
+        input_ids = torch.full((self.max_seq_len,), 3, dtype=torch.long)  # All PAD
+        labels = input_ids.clone()
+        return {
+            'input_ids': input_ids,
+            'labels': labels,
+        }
+
+
+@META_DATASET.register()
 class PretrainingDataset(Dataset):
     """
     Dataset for masked language modeling pretraining
+    Supports single merged corpus file format
     """
     
     def __init__(self, file_path: str, tokenizer, max_seq_len: int = 512, 
@@ -94,6 +230,7 @@ class PretrainingDataset(Dataset):
 def build_dataset(config: Dict[str, Any], tokenizer, split: str = 'train'):
     """
     Build a dataset from configuration
+    Supports both subset_*.txt format and merged corpus format
     
     Args:
         config: Dataset configuration
@@ -105,7 +242,17 @@ def build_dataset(config: Dict[str, Any], tokenizer, split: str = 'train'):
     """
     dataset_type = config.get('type', 'PretrainingDataset')
     
-    if dataset_type == 'PretrainingDataset':
+    if dataset_type == 'SubsetDataset':
+        # For corpus with subset_*.txt files structure
+        return SubsetDataset(
+            corpus_dir=config.get('corpus_dir', './corpus'),
+            tokenizer=tokenizer,
+            max_seq_len=config.get('max_seq_len', 512),
+            mlm_probability=config.get('mlm_probability', 0.15),
+            lines_per_file=config.get('lines_per_file', 1000)
+        )
+    elif dataset_type == 'PretrainingDataset':
+        # For merged corpus file format
         return PretrainingDataset(
             file_path=config.get('file_path', './processed_data/merged_corpus.txt'),
             tokenizer=tokenizer,
@@ -119,12 +266,38 @@ def build_dataset(config: Dict[str, Any], tokenizer, split: str = 'train'):
 def collate_fn(batch):
     """
     Collate function for DataLoader
-    Stack tensors into batches
+    Handles variable-length sequences with padding and attention masks
+    
+    Args:
+        batch: List of samples from dataset
+        
+    Returns:
+        Dictionary with padded input_ids, labels, and attention_mask
     """
-    input_ids = torch.stack([item['input_ids'] for item in batch])
-    labels = torch.stack([item['labels'] for item in batch])
+    # Find max length in batch
+    max_len = 0
+    for sample in batch:
+        seq_len = sample['input_ids'].shape[0]
+        if seq_len > max_len:
+            max_len = seq_len
+    
+    bs = len(batch)
+    PAD_TOKEN_ID = 3  # Padding token id
+    
+    # Initialize tensors
+    input_ids = torch.full((bs, max_len), PAD_TOKEN_ID, dtype=torch.long)
+    labels = torch.full((bs, max_len), PAD_TOKEN_ID, dtype=torch.long)
+    attention_mask = torch.zeros((bs, max_len), dtype=torch.float)
+    
+    # Fill in values
+    for idx, sample in enumerate(batch):
+        seq_len = sample['input_ids'].shape[0]
+        input_ids[idx, :seq_len] = sample['input_ids']
+        labels[idx, :seq_len] = sample['labels']
+        attention_mask[idx, :seq_len] = 1.0
     
     return {
         'input_ids': input_ids,
         'labels': labels,
+        'attention_mask': attention_mask,
     }
