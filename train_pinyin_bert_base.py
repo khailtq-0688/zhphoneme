@@ -13,6 +13,8 @@ import os
 
 EPOCHS = 150
 BS = 512
+CHECKPOINT = "pinyin_bert_weights"
+MODEL_NAME = "pinyin_bert_base"
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -59,6 +61,9 @@ def lr_lambda(current_step):
     
 lr_scheduler = LambdaLR(optimizer, lr_lambda)
 
+if not os.path.isdir(CHECKPOINT):
+    os.mkdir(CHECKPOINT)
+
 for epoch in range(1, EPOCHS + 1):
     total_loss = 0
     progress_bar = tqdm(dataloader, desc=f"Epoch {epoch}/{EPOCHS}")
@@ -78,11 +83,11 @@ for epoch in range(1, EPOCHS + 1):
         
         total_loss += loss.item()
         progress_bar.set_postfix({'loss': f"{loss.item():.4f}"})
+
+    torch.save({
+        "model": model,
+        "epoch": epoch
+    }, os.path.join(CHECKPOINT, f"{MODEL_NAME}.pth"))
         
     avg_loss = total_loss / len(dataloader)
     print(f"Epoch {epoch} - Average Loss: {avg_loss:.4f}")
-
-print("Saving the pretrained model")
-if not os.path.isdir("pinyin_bert_weights"):
-    os.mkdir("pinyin_bert_weights")
-torch.save(model, "pinyin_bert_weights/pinyin_bert_base.pth")
