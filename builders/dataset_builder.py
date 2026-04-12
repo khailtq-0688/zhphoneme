@@ -18,7 +18,8 @@ class SubsetDataset(Dataset):
     """
     
     def __init__(self, corpus_dir: str, tokenizer, max_seq_len: int = 512, 
-                 mlm_probability: float = 0.15, lines_per_file: int = 1000):
+                 mlm_probability: float = 0.15, lines_per_file: int = 1000,
+                 max_cache_files: int = 4000):
         """
         Initialize subset dataset
         
@@ -34,6 +35,10 @@ class SubsetDataset(Dataset):
         self.max_seq_len = max_seq_len
         self.mlm_probability = mlm_probability
         self.lines_per_file = lines_per_file
+
+        # Dictionary dùng làm Cache để chống I/O bottleneck
+        self.max_cache_files = max_cache_files
+        self._file_cache = {}
         
         # Count total lines across all subset files
         self.total_lines = self._count_total_lines()
@@ -54,6 +59,29 @@ class SubsetDataset(Dataset):
     def __len__(self) -> int:
         return self.total_lines
     
+    def _get_line_from_file(self, filepath: str, line_idx: int) -> str:
+        """Hàm phụ trợ: Lấy dòng text có sử dụng Cache"""
+        # Nếu file chưa có trong cache, tiến hành đọc từ ổ cứng
+        if filepath not in self._file_cache:
+            # Kiểm tra RAM: Nếu cache đã đầy, xóa file cũ nhất 
+            if len(self._file_cache) >= self.max_cache_files:
+                oldest_filepath = next(iter(self._file_cache))
+                del self._file_cache[oldest_filepath]
+            
+            # Đọc file 1 lần và lưu toàn bộ lines vào RAM
+            try:
+                with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
+                    self._file_cache[filepath] = f.readlines()
+            except Exception as e:
+                print(f"Error reading {filepath}: {e}")
+                self._file_cache[filepath] = []
+        
+        # Trích xuất dòng từ RAM thay vì đọc lại từ ổ cứng
+        lines = self._file_cache[filepath]
+        if line_idx < len(lines):
+            return lines[line_idx].strip()
+        return ""
+    
     def __getitem__(self, idx: int) -> Dict[str, torch.Tensor]:
         """Get a single item"""
         # Calculate which file and which line
@@ -61,18 +89,8 @@ class SubsetDataset(Dataset):
         
         # Read line from file
         filepath = os.path.join(self.corpus_dir, f"subset_{subset_idx}.txt")
-        try:
-            with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
-                lines = f.readlines()
-            
-            if line_idx < len(lines):
-                text = lines[line_idx].strip()
-            else:
-                # Fallback if line doesn't exist
-                text = ""
-        except Exception as e:
-            print(f"Error reading {filepath}: {e}")
-            text = ""
+
+        text = self._get_line_from_file(filepath, line_idx)
         
         if not text:
             # Return empty sample if text is empty
