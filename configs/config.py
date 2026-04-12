@@ -54,13 +54,14 @@ class ModelConfig:
 @dataclass
 class DataConfig:
     """Data Configuration"""
-    # Datasets
-    vietnamese_data_path: str = "/path/to/vietnamese/curated/dataset"
-    chinese_data_path: str = "/path/to/chinese/commoncrawl/dataset"
-    processed_data_dir: str = "./processed_data"
+    # Dataset
+    type: str = 'SubsetDataset'
+    corpus_dir: str = "."
+    lines_per_file: int = 1000
     
     # Processing
     max_seq_len: int = 512
+    mlm_probability: float = 0.15  # MLM masking probability
     preprocessing_workers: int = 8
     chunk_size: int = 10000
 
@@ -69,22 +70,26 @@ class DataConfig:
 class TrainingConfig:
     """Training Configuration"""
     # Training parameters
-    batch_size: int = 32
+    batch_size: int = 512
     gradient_accumulation_steps: int = 1
-    num_epochs: int = 3
-    learning_rate: float = 1e-4
+    num_epochs: int = 5
+    learning_rate: float = 6e-4
     weight_decay: float = 0.01
-    warmup_steps: int = 10000
+    # warmup_steps will be calculated dynamically as 5% of total_steps
     max_steps: int = -1  # -1 means no limit
     
     # Optimization
-    optimizer: str = 'adam'
-    scheduler: str = 'linear'
-    gradient_clip_val: float = 1.0
+    optimizer: str = 'adamw'
+    scheduler: str = 'lambda'
+    gradient_clip_norm: float = 1.0
+    
+    # AdamW specific
+    betas: tuple = (0.9, 0.98)
+    eps: float = 1e-6
     
     # Checkpointing and logging
-    save_steps: int = 500
-    eval_steps: int = 500
+    save_steps: int = 1000
+    eval_steps: int = 2000
     log_steps: int = 100
     save_total_limit: int = 3
     
