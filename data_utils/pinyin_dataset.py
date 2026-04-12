@@ -5,6 +5,7 @@ from vocabs.pinyin_tokenizer import PinyinTokenizer
 from vocabs.pinyin_tokenizer import PinyinEncodedTokens
 
 import os
+import math
 
 PAD_TOKEN_ID = 0
 
@@ -37,16 +38,22 @@ class PinyinDataset(Dataset):
         self.max_length = max_length
         self.corpus_dir = corpus_dir
         self.tokenizer = tokenizer
-        self.total_line = len(os.listdir(corpus_dir))
+        self.txt_files = os.listdir(corpus_dir)
+        self.total_line = 0
+        for txt_file in self.txt_files:
+            texts = open(os.path.join(corpus_dir, txt_file)).readlines()
+            self.total_line += len(texts)
+        self.LINE_PER_SUBSET = 1_000_000
 
     def __len__(self):
         return self.total_line
 
     def __getitem__(self, idx):
-        # the default format for the corpus file of each line if line_<idx>.txt
-        with open(os.path.join(self.corpus_dir, f"line_{idx}.txt")) as file:
-            text = file.readline()
+        # the default format for the corpus file of each line if subset_<idx>.txt
+        subset_idx, line_idx = divmod(idx+1, self.LINE_PER_SUBSET)
+        with open(os.path.join(self.corpus_dir, f"line_{subset_idx}.txt")) as file:
+            texts = file.readline()
 
-        encoded_text = self.tokenizer.tokenize(text)
+        encoded_text = self.tokenizer.tokenize(texts[line_idx])
 
         return encoded_text
