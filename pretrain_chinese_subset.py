@@ -70,18 +70,6 @@ def train_tokenizer_on_subset_files(config, corpus_dir):
     
     vocab_size = tokenizer_config.get('vocab_size', 30000)
     
-    # Create temporary merged file for tokenizer training
-    temp_training_file = Path(corpus_dir) / 'tokenizer_training.txt'
-    logger.info(f"Merging all subset files for tokenizer training...")
-    
-    with open(temp_training_file, 'w', encoding='utf-8') as out_f:
-        for filename in sorted(os.listdir(corpus_dir)):
-            if filename.startswith('subset_') and filename.endswith('.txt'):
-                filepath = os.path.join(corpus_dir, filename)
-                with open(filepath, 'r', encoding='utf-8', errors='ignore') as in_f:
-                    for line in in_f:
-                        out_f.write(line)
-    
     logger.info(f"Training tokenizer (vocab_size={vocab_size})")
     
     tokenizer = UnigramTokenizer(
@@ -89,15 +77,11 @@ def train_tokenizer_on_subset_files(config, corpus_dir):
         vocab_size=vocab_size
     )
     
+    training_files = [os.path.join(corpus_dir, txt_file) for txt_file in os.listdir(corpus_dir)]
     tokenizer.train(
-        corpus_path=str(temp_training_file),
-        vocab_size=vocab_size,
-        character_coverage=0.9999,
-        model_type='unigram'
+        training_files=training_files,
+        vocab_size=vocab_size
     )
-    
-    # Clean up temporary file
-    temp_training_file.unlink()
     
     logger.info(f"✓ Tokenizer saved to {model_prefix}")
     return model_prefix
@@ -159,7 +143,7 @@ def main():
         tokenizer_prefix = train_tokenizer_on_subset_files(config, corpus_dir)
         tokenizer_path = f"{tokenizer_prefix}.model"
     else:
-        tokenizer_path = Path('./tokenizers/unigram_tokenizer_chinese_subset.model')
+        tokenizer_path = Path('tokenizers/unigram_tokenizer_chinese_subset.model')
         if not tokenizer_path.exists():
             raise FileNotFoundError(f"Tokenizer not found: {tokenizer_path}")
     
@@ -167,7 +151,10 @@ def main():
     logger.info("Loading Tokenizer")
     logger.info("="*60)
     
-    tokenizer = UnigramTokenizer()
+    tokenizer = UnigramTokenizer(
+        model_prefix=config.tokenizer.model_prefix,
+        vocab_size=config.tokenizer.vocab_size
+    )
     tokenizer.load(str(tokenizer_path))
     logger.info(f"✓ Tokenizer loaded from {tokenizer_path}")
     
@@ -204,6 +191,21 @@ def main():
     logger.info("="*60)
     
     training_config = dict_to_dotdict({
+        "hidden_size": config.model.hidden_size,
+        "num_hidden_layers": config.model.num_hidden_layers,
+        "num_attention_heads": config.model.num_attention_heads,
+        "d_q": config.model.d_q,
+        "d_kv": config.model.d_kv,
+        "intermediate_size": config.model.intermediate_size,
+        "hidden_act": config.model.hidden_act,
+        "hidden_dropout_prob": config.model.hidden_dropout_prob,
+        "attention_probs_dropout_prob": config.model.attention_probs_dropout_prob,
+        "max_position_embeddings": config.model.max_position_embeddings,
+        "type_vocab_size": config.model.type_vocab_size,
+        "initializer_range": config.model.initializer_range,
+        "layer_norm_eps": config.model.layer_norm_eps,
+        "max_seq_len": config.model.max_seq_len,
+        "label_smoothing": config.model.label_smoothing,
         'device': device,
         'tokenizer': tokenizer,
         'checkpoint_dir': Path('./checkpoints/chinese_subset_pretrain'),
@@ -214,7 +216,6 @@ def main():
         'eps': config.get('training', {}).get('eps', 1e-6),
         'batch_size': batch_size,
         'num_epochs': config.get('training', {}).get('num_epochs', 5),
-        'max_seq_len': config.get('dataset', {}).get('max_seq_len', 512),
         'mlm_probability': config.get('dataset', {}).get('mlm_probability', 0.15),
     })
     

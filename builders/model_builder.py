@@ -25,14 +25,14 @@ def build_model(config: ModelConfig, vocab_size: int):
     # Create model
     model = model_class(
         vocab_size=vocab_size,
-        d_model=config.d_model,
-        nlayers=config.nlayers,
-        head=config.head,
+        d_model=config.hidden_size,
+        nlayers=config.num_hidden_layers,
+        head=config.num_attention_heads,
         d_q=config.d_q,
         d_kv=config.d_kv,
-        d_ff=config.d_ff,
-        dropout=config.dropout,
-        pad_idx=config.pad_idx,
+        d_ff=config.intermediate_size,
+        dropout=config.hidden_dropout_prob,
+        pad_idx=config.tokenizer.model.pad_id(),
         max_seq_len=config.max_seq_len,
         label_smoothing=config.label_smoothing,
     )

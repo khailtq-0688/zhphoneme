@@ -6,6 +6,8 @@ model:
   hidden_size: 768
   num_hidden_layers: 12
   num_attention_heads: 12
+  d_q: 64
+  d_kv: 64
   intermediate_size: 3072
   hidden_act: gelu
   hidden_dropout_prob: 0.1
@@ -14,17 +16,19 @@ model:
   type_vocab_size: 2
   initializer_range: 0.02
   layer_norm_eps: 1.0e-12
+  max_seq_len: 512
+  label_smoothing: 0.1
 
 dataset:
   type: SubsetDataset
   corpus_dir: ../../baidubaike_chinese
   max_seq_len: 512
-  mlm_probability: 0.15
+  mlm_probability: 0.3
   lines_per_file: 1000
 
 tokenizer:
   type: unigram
-  model_prefix: ./tokenizers/unigram_tokenizer_chinese_subset
+  model_prefix: checkpoints/unigram_tokenizer_chinese_subset
   vocab_size: 30000
   character_coverage: 0.9999
 
@@ -42,9 +46,10 @@ training:
   gradient_accumulation_steps: 1
   
   # Training parameters
-  batch_size: 512
-  num_epochs: 5
+  batch_size: 256
+  num_epochs: 150
   num_workers: 4
+  device: cuda
   
   # Warmup will be calculated as 5% of total_steps dynamically
   # warmup_steps formula: int(total_steps * 0.05)

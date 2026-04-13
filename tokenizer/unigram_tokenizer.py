@@ -77,7 +77,7 @@ class UnigramTokenizer:
     def load(self, model_prefix: str):
         """Load pretrained tokenizer"""
         self.model = spm.SentencePieceProcessor()
-        self.model.Load(f"{model_prefix}.model")
+        self.model.Load(f"{model_prefix}")
         logger.info(f"Loaded tokenizer from {model_prefix}")
         
     def encode(self, text: str) -> List[int]:

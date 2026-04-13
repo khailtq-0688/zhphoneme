@@ -33,22 +33,22 @@ class BasePretrainingTask:
         self.logger = self._setup_logger()
         self.config = config
         self.device = torch.device(
-            config.training.get('device', 'cuda' if torch.cuda.is_available() else 'cpu')
+            config.get('device', 'cuda' if torch.cuda.is_available() else 'cpu')
         )
         
         self.logger.info(f"Using device: {self.device}")
         
         # Setup checkpoint directory
-        self.checkpoint_dir = Path(config.training.get('checkpoint_dir', './checkpoints'))
+        self.checkpoint_dir = Path(config.get('checkpoint_dir', './checkpoints'))
         self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
         
         # Initialize tokenizer
-        self.logger.info("Initializing tokenizer...")
-        self.tokenizer = self._load_tokenizer(config)
+        # self.logger.info("Initializing tokenizer...")
+        # self.tokenizer = self._load_tokenizer(config)
         
         # Initialize model
         self.logger.info("Building model...")
-        self.model = build_model(config.model, vocab_size=self.tokenizer.get_vocab_size())
+        self.model = build_model(config, vocab_size=config.tokenizer.get_vocab_size())
         self.model.to(self.device)
         
         # Log model info
@@ -85,11 +85,11 @@ class BasePretrainingTask:
     
     def _setup_optimizer(self, config):
         """Setup optimizer and learning rate scheduler"""
-        optimizer_type = config.training.get('optimizer', 'adamw').lower()
-        learning_rate = config.training.get('learning_rate', 6e-4)
-        weight_decay = config.training.get('weight_decay', 0.01)
-        betas = config.training.get('betas', (0.9, 0.98))
-        eps = config.training.get('eps', 1e-6)
+        optimizer_type = config.get('optimizer', 'adamw').lower()
+        learning_rate = config.get('learning_rate', 6e-4)
+        weight_decay = config.get('weight_decay', 0.01)
+        betas = config.get('betas', (0.9, 0.98))
+        eps = config.get('eps', 1e-6)
         
         if optimizer_type == 'adamw':
             self.optimizer = AdamW(
@@ -230,15 +230,13 @@ class MLMPretrainingTask(BasePretrainingTask):
         
         self.logger.info(f"Total steps: {self.total_steps}")
         self.logger.info(f"Warmup steps: {self.warmup_steps} (5% of total)")
-        self.logger.info(f"Batch size: {self.config.training.get('batch_size', 32)}")
-        self.logger.info(f"Learning rate: {self.config.training.get('learning_rate', 6e-4)}")
+        self.logger.info(f"Batch size: {self.config.get('batch_size', 32)}")
+        self.logger.info(f"Learning rate: {self.config.get('learning_rate', 6e-4)}")
         self.logger.info(f"Scheduler: LambdaLR with linear warmup and decay")
         
         for epoch in range(num_epochs):
             self.epoch = epoch
-            self.logger.info(f"\n{'='*60}")
             self.logger.info(f"Epoch {epoch + 1}/{num_epochs}")
-            self.logger.info(f"{'='*60}")
             
             train_loss = self._train_epoch(train_dataloader)
             self.logger.info(f"Epoch {epoch + 1} - Average Loss: {train_loss:.4f}")
@@ -269,7 +267,7 @@ class MLMPretrainingTask(BasePretrainingTask):
             
             # Forward pass
             self.optimizer.zero_grad()
-            logits, loss, attentions = self.model(input_ids, labels)
+            _, loss, _ = self.model(input_ids, labels)
             
             # Backward pass
             loss.backward()
@@ -277,7 +275,7 @@ class MLMPretrainingTask(BasePretrainingTask):
             # Gradient clipping
             torch.nn.utils.clip_grad_norm_(
                 self.model.parameters(),
-                self.config.training.get('gradient_clip_norm', 1.0)
+                self.config.get('gradient_clip_norm', 1.0)
             )
             
             # Optimizer & Scheduler step

@@ -112,7 +112,7 @@ class PhrasalLexemeEncoder(nn.Module):
 
         return features, (self_attns, phrasal_attns, attn_scores)
 
-class Model(nn.Module):
+class ViWordFormer(nn.Module):
     """Model for MLM"""
     
     def __init__(self, vocab_size: int, d_model: int = 768, nlayers: int = 12, 
