@@ -85,8 +85,10 @@ for epoch in range(1, EPOCHS + 1):
         progress_bar.set_postfix({'loss': f"{loss.item():.4f}"})
 
     torch.save({
-        "model": model,
-        "epoch": epoch
+        "model": model.state_dict(),
+        "epoch": epoch,
+        "scheduler": lr_scheduler.state_dict(),
+        "optimizer": optimizer.state_dict()
     }, os.path.join(CHECKPOINT, f"{MODEL_NAME}.pth"))
         
     avg_loss = total_loss / len(dataloader)
