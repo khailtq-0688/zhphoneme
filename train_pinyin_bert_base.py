@@ -19,7 +19,7 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 
 config = PinyinBertConfig(
     hidden_size=768,
-    num_hidden_layers=6,
+    num_hidden_layers=12,
     num_attention_heads=12,
     intermediate_size=3072,
     hidden_act="gelu",
