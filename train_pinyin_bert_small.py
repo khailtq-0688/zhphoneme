@@ -35,7 +35,8 @@ config = PinyinBertConfig(
 tokenizer = PinyinTokenizer(config)
 dataset = PinyinDataset(
     tokenizer=tokenizer, 
-    corpus_dir="../Chinese-pretrained-corpus/baidubaike_chinese", 
+    # corpus_dir="../Chinese-pretrained-corpus/baidubaike_chinese", 
+    corpus_dir="data/baidubaike_chinese", 
     max_length=config.max_length
 )
 dataloader = DataLoader(
@@ -43,7 +44,11 @@ dataloader = DataLoader(
     batch_size=BS,
     shuffle=True,
     num_workers=4,
-    collate_fn=collate_fn
+    num_workers=4,              # tune this
+    pin_memory=True,            # faster GPU transfer
+    persistent_workers=True,    # avoid worker restart
+    prefetch_factor=4,
+    collate_fn=lambda x: collate_fn(x, tokenizer)
 )
 model = PinyinBert(config).to(device)
 model.train()
@@ -85,11 +90,12 @@ for epoch in range(1, EPOCHS + 1):
         progress_bar.set_postfix({'loss': f"{loss.item():.4f}"})
 
     torch.save({
-        "model": model.state_dict(),
         "epoch": epoch,
         "scheduler": lr_scheduler.state_dict(),
         "optimizer": optimizer.state_dict()
-    }, os.path.join(CHECKPOINT, f"{MODEL_NAME}.pth"))
-        
+    }, os.path.join(CHECKPOINT, f"{MODEL_NAME}_training.pth"))
+
+    model.save_pretrained(os.path.join(CHECKPOINT, f"{MODEL_NAME}"))
+
     avg_loss = total_loss / len(dataloader)
     print(f"Epoch {epoch} - Average Loss: {avg_loss:.4f}")

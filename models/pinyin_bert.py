@@ -29,7 +29,7 @@ class PinyinBert(PreTrainedModel):
         # 4. HÀM LOSS CHUNG
         self.loss_fn = nn.CrossEntropyLoss(ignore_index=self.config.pad_token_id)
 
-        self.initialize_weights()
+        self.init_weights()
 
     def forward(self, input_ids, attention_mask=None, labels=None):
         bs, len, _ = input_ids.shape

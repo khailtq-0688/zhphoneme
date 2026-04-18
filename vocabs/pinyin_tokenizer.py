@@ -105,7 +105,7 @@ class PinyinTokenizer:
 
         return vec
     
-    def tokenize(self, sentence: str) -> PinyinEncodedTokens:
+    def __call__(self, sentence: str) -> PinyinEncodedTokens:
         sentence_ids = self.encode(sentence)
         input_ids, labels = self.create_labels(sentence_ids)
         attention_mask = self.create_attention_mask(sentence_ids)
