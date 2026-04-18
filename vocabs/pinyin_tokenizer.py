@@ -50,6 +50,8 @@ class PinyinTokenizer:
             token_id = input_ids[idx+1, 0]
             if token_id in self.config.special_ids:
                 continue
+            if token_id in self.config.others:
+                continue
             if random.random() <= 0.3:
                     labels[idx+1, :] = input_ids[idx+1, :]
                     input_ids[idx+1, :] = self.config.mask_token_id
@@ -99,9 +101,14 @@ class PinyinTokenizer:
                         (self.config.label2id[char], ) * 3 if char in self.config.label2id else (self.config.unk_token_id, ) * 3
                     )
 
+        # truncate the length
+        current_len = len(syllables)
+        if current_len > self.config.max_length:
+            syllables = syllables[:self.config.max_length]
+        else:
+            delta_len = self.config.max_length - current_len
+            syllables += [(self.config.pad_token_id, )*3, ]*delta_len
         vec = torch.tensor(syllables).long()
-        # truncate the input
-        vec = vec[:self.config.max_length]
 
         return vec
     

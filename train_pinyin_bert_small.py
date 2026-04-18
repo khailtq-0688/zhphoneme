@@ -35,21 +35,23 @@ config = PinyinBertConfig(
 tokenizer = PinyinTokenizer(config)
 dataset = PinyinDataset(
     tokenizer=tokenizer, 
-    # corpus_dir="../Chinese-pretrained-corpus/baidubaike_chinese", 
-    corpus_dir="data/baidubaike_chinese", 
+    corpus_file="../Chinese-pretrained-corpus/baidubaike_corpus.txt", 
+    # corpus_dir="data/baidubaike_chinese", 
     max_length=config.max_length
 )
 dataloader = DataLoader(
     dataset=dataset,
     batch_size=BS,
     shuffle=True,
-    num_workers=4,
     num_workers=4,              # tune this
     pin_memory=True,            # faster GPU transfer
     persistent_workers=True,    # avoid worker restart
     prefetch_factor=4,
-    collate_fn=lambda x: collate_fn(x, tokenizer)
+    collate_fn=collate_fn
 )
+for item in tqdm(dataloader):
+    continue
+raise
 model = PinyinBert(config).to(device)
 model.train()
 optimizer = torch.optim.AdamW(model.parameters(), lr=6e-4, weight_decay=0.01, betas=(0.9, 0.98), eps=10e-6)
