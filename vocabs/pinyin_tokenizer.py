@@ -59,8 +59,6 @@ class PinyinTokenizer:
         return input_ids, labels
     
     def normalize(self, text: str):
-        text = text.strip().lower()
-
         text = re.sub("？", "?", text)
         text = re.sub("！", "!", text)
         text = re.sub("…", "", text)
@@ -80,7 +78,6 @@ class PinyinTokenizer:
         return text
 
     def encode(self, sentence: str) -> torch.Tensor:
-        sentence = self.normalize(sentence)
         syllables = [
             (self.config.cls_token_id, ) * 3
         ]
@@ -101,23 +98,16 @@ class PinyinTokenizer:
                         (self.config.label2id[char], ) * 3 if char in self.config.label2id else (self.config.unk_token_id, ) * 3
                     )
 
-        # truncate the length
-        current_len = len(syllables)
-        if current_len > self.config.max_length:
-            syllables = syllables[:self.config.max_length]
-        else:
-            delta_len = self.config.max_length - current_len
-            syllables += [(self.config.pad_token_id, )*3, ]*delta_len
         vec = torch.tensor(syllables).long()
+        # truncate the input
+        vec = vec[:self.config.max_length]
 
         return vec
     
     def __call__(self, sentence: str) -> PinyinEncodedTokens:
         sentence_ids = self.encode(sentence)
         input_ids, labels = self.create_labels(sentence_ids)
-        attention_mask = self.create_attention_mask(sentence_ids)
         return PinyinEncodedTokens(
             input_ids = input_ids,
-            attention_mask = attention_mask,
             labels = labels
         )

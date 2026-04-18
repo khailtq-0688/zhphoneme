@@ -13,8 +13,12 @@ class PinyinBert(PreTrainedModel):
         # SHARED EMBEDDING CHO CẢ 3 THÀNH PHẦN
         self.shared_embeddings = nn.Embedding(
             config.vocab_size, 
-            config.hidden_size // 3,
+            config.hidden_size,
             padding_idx=config.pad_token_id
+        )
+        self.fc_emb = nn.Linear(
+            in_features=config.hidden_size*3,
+            out_features=config.hidden_size
         )
         
         # 2. BERT ENCODER
@@ -33,8 +37,9 @@ class PinyinBert(PreTrainedModel):
 
     def forward(self, input_ids, attention_mask=None, labels=None):
         bs, len, _ = input_ids.shape
-        inputs_embeds = self.shared_embeddings(input_ids) # (bs, len, 3, dim/3)
-        inputs_embeds = inputs_embeds.reshape(bs, len, -1) # (bs, len, dim)
+        inputs_embeds = self.shared_embeddings(input_ids) # (bs, len, 3, dim)
+        inputs_embeds = inputs_embeds.reshape(bs, len, -1) # (bs, len, 3*dim)
+        inputs_embeds = self.fc_emb(inputs_embeds) # (bs, len, dim)
 
         outputs = self.bert(inputs_embeds=inputs_embeds, attention_mask=attention_mask)
         sequence_output = outputs.last_hidden_state # (B, L, 768)

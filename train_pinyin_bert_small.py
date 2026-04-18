@@ -11,8 +11,7 @@ from data_utils.pinyin_dataset import collate_fn
 from tqdm import tqdm
 import os
 
-EPOCHS = 150
-BS = 512
+BS = 64
 CHECKPOINT = "pinyin_bert_weights"
 MODEL_NAME = "pinyin_bert_small"
 
@@ -43,20 +42,14 @@ dataloader = DataLoader(
     dataset=dataset,
     batch_size=BS,
     shuffle=True,
-    num_workers=4,              # tune this
-    pin_memory=True,            # faster GPU transfer
-    persistent_workers=True,    # avoid worker restart
-    prefetch_factor=4,
+    num_workers=24,
     collate_fn=collate_fn
 )
-for item in tqdm(dataloader):
-    continue
-raise
 model = PinyinBert(config).to(device)
 model.train()
 optimizer = torch.optim.AdamW(model.parameters(), lr=6e-4, weight_decay=0.01, betas=(0.9, 0.98), eps=10e-6)
 
-total_steps = len(dataloader) * EPOCHS
+total_steps = 1_000_000
 warmup_steps = int(total_steps * 0.05)
 
 print(f"Total steps: {total_steps}")
@@ -70,7 +63,7 @@ lr_scheduler = LambdaLR(optimizer, lr_lambda)
 
 if not os.path.isdir(CHECKPOINT):
     os.mkdir(CHECKPOINT)
-
+EPOCHS = total_steps // len(dataloader)
 for epoch in range(1, EPOCHS + 1):
     total_loss = 0
     progress_bar = tqdm(dataloader, desc=f"Epoch {epoch}/{EPOCHS}")
