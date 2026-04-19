@@ -34,8 +34,7 @@ config = PinyinBertConfig(
 tokenizer = PinyinTokenizer(config)
 dataset = PinyinDataset(
     tokenizer=tokenizer, 
-    corpus_file="../Chinese-pretrained-corpus/baidubaike_corpus.txt", 
-    # corpus_dir="data/baidubaike_chinese", 
+    corpus_dir="../Chinese-pretrained-corpus/baidubaike_corpus", 
     max_length=config.max_length
 )
 dataloader = DataLoader(
@@ -43,7 +42,7 @@ dataloader = DataLoader(
     batch_size=BS,
     shuffle=True,
     num_workers=24,
-    collate_fn=collate_fn
+    collate_fn= lambda samples: collate_fn(samples, tokenizer)
 )
 model = PinyinBert(config).to(device)
 model.train()
