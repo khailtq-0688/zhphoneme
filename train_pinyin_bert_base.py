@@ -11,7 +11,7 @@ from data_utils.pinyin_dataset import collate_fn
 from tqdm import tqdm
 import os
 
-BS = 64
+BS = 256
 CHECKPOINT = "pinyin_bert_weights"
 MODEL_NAME = "pinyin_bert_base"
 
@@ -34,7 +34,7 @@ config = PinyinBertConfig(
 tokenizer = PinyinTokenizer(config)
 dataset = PinyinDataset(
     tokenizer=tokenizer, 
-    corpus_dir="../Chinese-pretrained-corpus/baidubaike_corpus", 
+    corpus_dir="data/baidubaike_chinese", 
     max_length=config.max_length
 )
 dataloader = DataLoader(
@@ -42,7 +42,7 @@ dataloader = DataLoader(
     batch_size=BS,
     shuffle=True,
     num_workers=24,
-    collate_fn= lambda samples: collate_fn(samples, tokenizer)
+    collate_fn=collate_fn
 )
 model = PinyinBert(config).to(device)
 model.train()
