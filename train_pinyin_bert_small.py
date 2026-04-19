@@ -7,6 +7,7 @@ from vocabs.pinyin_tokenizer import PinyinTokenizer
 from data_utils.pinyin_dataset import PinyinDataset
 from models.pinyin_bert import PinyinBert
 from data_utils.pinyin_dataset import collate_fn
+from optimizers.bert_adam import get_optimizer
 
 from tqdm import tqdm
 import os
@@ -44,24 +45,27 @@ dataloader = DataLoader(
     num_workers=24,
     collate_fn=collate_fn
 )
-for item in tqdm(dataloader):
-    continue
-raise
 model = PinyinBert(config).to(device)
 model.train()
-optimizer = torch.optim.AdamW(model.parameters(), lr=6e-4, weight_decay=0.01, betas=(0.9, 0.98), eps=10e-6)
-
+# optimizer = torch.optim.AdamW(model.parameters(), lr=6e-4, weight_decay=0.01, betas=(0.9, 0.98), eps=10e-6)
 total_steps = 1_000_000
-warmup_steps = int(total_steps * 0.05)
+optimizer = get_optimizer(
+    model=model,
+    float16=False,
+    learning_rate=6e-4,
+    total_steps=total_steps,
+    schedule="warmup_poly",
+    warmup_rate=0.05,
+    weight_decay_rate=0.01,
+    max_grad_norm=0
+)
 
-print(f"Total steps: {total_steps}")
-
-def lr_lambda(current_step):
-    if current_step < warmup_steps:
-        return float(current_step) / float(max(1, warmup_steps)) 
-    return max(0.0, float(total_steps - current_step) / float(max(1, total_steps - warmup_steps)))
+# def lr_lambda(current_step):
+#     if current_step < warmup_steps:
+#         return float(current_step) / float(max(1, warmup_steps)) 
+#     return max(0.0, float(total_steps - current_step) / float(max(1, total_steps - warmup_steps)))
     
-lr_scheduler = LambdaLR(optimizer, lr_lambda)
+# lr_scheduler = LambdaLR(optimizer, lr_lambda)
 
 if not os.path.isdir(CHECKPOINT):
     os.mkdir(CHECKPOINT)
@@ -81,14 +85,14 @@ for epoch in range(1, EPOCHS + 1):
         loss = outputs['loss']
         loss.backward()
         optimizer.step()
-        lr_scheduler.step()
+        # lr_scheduler.step()
         
         total_loss += loss.item()
         progress_bar.set_postfix({'loss': f"{loss.item():.4f}"})
 
     torch.save({
         "epoch": epoch,
-        "scheduler": lr_scheduler.state_dict(),
+        # "scheduler": lr_scheduler.state_dict(),
         "optimizer": optimizer.state_dict()
     }, os.path.join(CHECKPOINT, f"{MODEL_NAME}_training.pth"))
 
