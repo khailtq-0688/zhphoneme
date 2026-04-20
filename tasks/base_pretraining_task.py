@@ -205,7 +205,7 @@ class MLMPretrainingTask(BasePretrainingTask):
     def __init__(self, config):
         super().__init__(config)
     
-    def train(self, num_epochs: Optional[int] = None, train_dataloader: Optional['DataLoader'] = None):
+    def train(self, num_epochs: Optional[int] = None, train_dataloader: Optional['DataLoader'] = None, val_dataloader: Optional['DataLoader'] = None):
         """Training loop for MLM
         
         Args:
@@ -238,17 +238,25 @@ class MLMPretrainingTask(BasePretrainingTask):
             self.epoch = epoch
             self.logger.info(f"Epoch {epoch + 1}/{num_epochs}")
             
+            # 1. Huấn luyện (Học)
             train_loss = self._train_epoch(train_dataloader)
-            self.logger.info(f"Epoch {epoch + 1} - Average Loss: {train_loss:.4f}")
+            self.logger.info(f"Epoch {epoch + 1} - Average Train Loss: {train_loss:.4f}")
             
-            # Save checkpoint
+            # 2. Lưu lại checkpoint kết quả của epoch này
             self.save_checkpoint(tag=f'epoch_{epoch + 1}')
             
-            # Save best model
-            if train_loss < self.best_loss:
-                self.best_loss = train_loss
-                self.save_checkpoint(tag='best')
-                self.logger.info(f"✓ Best loss improved to {self.best_loss:.4f}")
+            # 3. Đánh giá (Thi thử) và lưu Best Model
+            if val_dataloader is not None:
+                eval_loss = self.evaluate(val_dataloader)
+                self.logger.info(f"Epoch {epoch + 1} - Average Eval Loss: {eval_loss:.4f}")
+                
+                # So sánh dựa trên điểm thi thử (eval_loss), không dùng train_loss
+                if eval_loss < self.best_loss:
+                    self.best_loss = eval_loss
+                    self.save_checkpoint(tag='best')
+                    self.logger.info(f"✓ Best validation loss improved to {self.best_loss:.4f}")
+            else:
+                self.logger.info("Skipping validation as no val_dataloader was provided.")
         
         self.logger.info("\n" + "="*60)
         self.logger.info("Training complete!")

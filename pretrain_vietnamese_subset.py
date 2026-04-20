@@ -90,10 +90,8 @@ def train_tokenizer_on_subset_files(config, corpus_dir):
     )
     
     tokenizer.train(
-        corpus_path=str(temp_training_file),
+        training_files=[str(temp_training_file)],
         vocab_size=vocab_size,
-        character_coverage=0.9999,
-        model_type='unigram'
     )
     
     # Clean up temporary file
