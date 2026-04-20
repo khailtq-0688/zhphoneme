@@ -146,8 +146,11 @@ class ViWordFormer(nn.Module):
         
         self.loss = nn.CrossEntropyLoss(ignore_index=-100, label_smoothing=label_smoothing)
 
-    def forward(self, input_ids: torch.Tensor, labels: torch.Tensor = None):
-        padding_mask = (input_ids != self.pad_idx).long().to(input_ids.device)
+    def forward(self, input_ids: torch.Tensor, attention_mask: torch.Tensor = None, labels: torch.Tensor = None):
+        if attention_mask is not None:
+            padding_mask = attention_mask.to(input_ids.device)
+        else:
+            padding_mask = (input_ids != self.pad_idx).long().to(input_ids.device)
 
         features = self.embedding(input_ids)
         features = self.pe(features)

@@ -48,7 +48,12 @@ class BasePretrainingTask:
         
         # Initialize model
         self.logger.info("Building model...")
-        self.model = build_model(config, vocab_size=config.tokenizer.get_vocab_size())
+        if hasattr(config, 'model') and isinstance(config.model, nn.Module):
+            self.logger.info("Using provided pretrained model for fine-tuning...")
+            self.model = config.model
+        else:
+            self.logger.info("Building model from scratch...")
+            self.model = build_model(config, vocab_size=config.tokenizer.get_vocab_size())
         self.model.to(self.device)
         
         # Log model info
@@ -154,8 +159,10 @@ class BasePretrainingTask:
             for batch in tqdm(dataloader, desc='Evaluating', leave=False):
                 input_ids = batch['input_ids'].to(self.device)
                 labels = batch['labels'].to(self.device)
+
+                attention_mask = batch['attention_mask'].to(self.device)
+                _, loss, _ = self.model(input_ids, attention_mask=attention_mask, labels=labels)
                 
-                _, loss, _ = self.model(input_ids, labels)
                 total_loss += loss.item()
         
         return total_loss / len(dataloader)
@@ -274,8 +281,10 @@ class MLMPretrainingTask(BasePretrainingTask):
         for batch_idx, batch in enumerate(progress_bar):
             input_ids = batch['input_ids'].to(self.device)
             labels = batch['labels'].to(self.device)
+
+            attention_mask = batch['attention_mask'].to(self.device)
             
-            _, loss, _ = self.model(input_ids, labels)
+            _, loss, _ = self.model(input_ids, attention_mask=attention_mask, labels=labels)
             
             # Chia loss cho số bước tích lũy
             loss = loss / accum_steps
