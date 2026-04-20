@@ -262,39 +262,38 @@ class MLMPretrainingTask(BasePretrainingTask):
         self.logger.info("Training complete!")
         self.logger.info("="*60)
     
+    # add gradient accumulate
     def _train_epoch(self, dataloader: DataLoader) -> float:
-        """Train for one epoch - simplified pattern"""
         self.model.train()
         total_loss = 0.0
-        
         progress_bar = tqdm(dataloader, desc=f'Epoch {self.epoch + 1} Training', leave=True)
         
-        for batch in progress_bar:
+        # Lấy số bước tích lũy từ config
+        accum_steps = self.config.get('gradient_accumulation_steps', 1)
+        
+        for batch_idx, batch in enumerate(progress_bar):
             input_ids = batch['input_ids'].to(self.device)
             labels = batch['labels'].to(self.device)
             
-            # Forward pass
-            self.optimizer.zero_grad()
             _, loss, _ = self.model(input_ids, labels)
             
-            # Backward pass
+            # Chia loss cho số bước tích lũy
+            loss = loss / accum_steps
             loss.backward()
             
-            # Gradient clipping
-            torch.nn.utils.clip_grad_norm_(
-                self.model.parameters(),
-                self.config.get('gradient_clip_norm', 1.0)
-            )
+            # Chỉ step optimizer khi đủ số mẻ (accum_steps)
+            if ((batch_idx + 1) % accum_steps == 0) or (batch_idx + 1 == len(dataloader)):
+                torch.nn.utils.clip_grad_norm_(
+                    self.model.parameters(),
+                    self.config.get('gradient_clip_norm', 1.0)
+                )
+                self.optimizer.step()
+                if self.scheduler is not None:
+                    self.scheduler.step()
+                self.optimizer.zero_grad()
+                self.global_step += 1
             
-            # Optimizer & Scheduler step
-            self.optimizer.step()
-            self.scheduler.step()
+            total_loss += loss.item() * accum_steps # Nhân ngược lại để log ra đúng loss thực
+            progress_bar.set_postfix({'loss': f"{(loss.item() * accum_steps):.4f}"})
             
-            self.global_step += 1
-            total_loss += loss.item()
-            
-            # Update progress bar with loss
-            progress_bar.set_postfix({'loss': f"{loss.item():.4f}"})
-        
-        avg_loss = total_loss / len(dataloader)
-        return avg_loss
+        return total_loss / len(dataloader)
