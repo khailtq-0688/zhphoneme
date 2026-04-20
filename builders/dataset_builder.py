@@ -274,27 +274,12 @@ def collate_fn(batch):
     Returns:
         Dictionary with padded input_ids, labels, and attention_mask
     """
-    # Find max length in batch
-    max_len = 0
-    for sample in batch:
-        seq_len = sample['input_ids'].shape[0]
-        if seq_len > max_len:
-            max_len = seq_len
-    
-    bs = len(batch)
     PAD_TOKEN_ID = 3  # Padding token id
     
-    # Initialize tensors
-    input_ids = torch.full((bs, max_len), PAD_TOKEN_ID, dtype=torch.long)
-    labels = torch.full((bs, max_len), PAD_TOKEN_ID, dtype=torch.long)
-    attention_mask = torch.zeros((bs, max_len), dtype=torch.float)
+    input_ids = torch.stack([sample['input_ids'] for sample in batch])
+    labels = torch.stack([sample['labels'] for sample in batch])
     
-    # Fill in values
-    for idx, sample in enumerate(batch):
-        seq_len = sample['input_ids'].shape[0]
-        input_ids[idx, :seq_len] = sample['input_ids']
-        labels[idx, :seq_len] = sample['labels']
-        attention_mask[idx, :seq_len] = 1.0
+    attention_mask = (input_ids != PAD_TOKEN_ID).float()
     
     return {
         'input_ids': input_ids,
