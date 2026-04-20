@@ -127,8 +127,6 @@ class SubsetDataset(Dataset):
         
         # Apply masking (mask token id is 0)
         input_ids[mask_indices] = 0
-
-        labels[~mask_indices] = -100
         
         return {
             'input_ids': input_ids,
@@ -222,6 +220,8 @@ class PretrainingDataset(Dataset):
         
         # Apply masking (mask token id is 0)
         input_ids[mask_indices] = 0
+
+        labels[~mask_indices] = -100
         
         return {
             'input_ids': input_ids,
