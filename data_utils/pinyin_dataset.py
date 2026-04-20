@@ -1,5 +1,5 @@
-import torch
 from torch.utils.data import Dataset
+from torch.nn.utils.rnn import pad_sequence
 
 from vocabs.pinyin_tokenizer import PinyinTokenizer
 from vocabs.pinyin_tokenizer import PinyinEncodedTokens
@@ -9,27 +9,30 @@ import os
 PAD_TOKEN_ID = 0
 
 def collate_fn(samples: list[PinyinEncodedTokens]):
-    max_len = 0
-    for sample in samples:
-        length, _ = sample.input_ids.shape
-        if length > max_len:
-            max_len = length
+    # Extract tensors
+    input_ids_list = [s.input_ids for s in samples]   # (seq_len, 3)
+    labels_list = [s.labels for s in samples]
 
-    bs = len(samples)
-    input_ids = torch.full((bs, max_len, 3), fill_value=PAD_TOKEN_ID, dtype=torch.long)
-    labels = torch.full((bs, max_len, 3), fill_value=PAD_TOKEN_ID, dtype=torch.long)
-    attention_mask = torch.zeros((bs, max_len))
+    # Pad sequences (batch_first=True → (bs, max_len, ...))
+    input_ids = pad_sequence(
+        input_ids_list,
+        batch_first=True,
+        padding_value=PAD_TOKEN_ID
+    )
 
-    for idx, sample in enumerate(samples):
-        input_len = sample.input_ids.shape[0]
-        input_ids[idx, :input_len] = sample.input_ids
-        labels[idx, :input_len] = sample.labels
-        attention_mask[idx, :input_len] = sample.attention_mask
+    labels = pad_sequence(
+        labels_list,
+        batch_first=True,
+        padding_value=PAD_TOKEN_ID
+    )
+
+    # Attention mask: 1 where not PAD
+    attention_mask = (input_ids[..., 0] != PAD_TOKEN_ID).long()
 
     return PinyinEncodedTokens(
-        input_ids=input_ids.long(),
-        labels=labels.long(),
-        attention_mask=attention_mask.long()
+        input_ids=input_ids,
+        labels=labels,
+        attention_mask=attention_mask,
     )
 
 class PinyinDataset(Dataset):
@@ -54,6 +57,6 @@ class PinyinDataset(Dataset):
         with open(os.path.join(self.corpus_dir, f"subset_{subset_idx}.txt")) as file:
             texts = file.readlines()
         
-        encoded_text = self.tokenizer.tokenize(texts[line_idx-1])
+        encoded_text = self.tokenizer(texts[line_idx-1])
 
         return encoded_text

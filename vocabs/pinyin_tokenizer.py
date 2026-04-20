@@ -38,8 +38,7 @@ class PinyinTokenizer:
 
     def create_attention_mask(self, ids: torch.Tensor):
         ids = ids[:, 0]
-        mask = (ids == self.config.pad_token_id).float()
-        mask = 1 - mask.long() # revert the mask, 1 for real tokens (not padding) while 0 for padding tokens
+        mask = (ids != self.config.pad_token_id).long()
 
         return mask
     
@@ -54,7 +53,7 @@ class PinyinTokenizer:
                     labels[idx+1, :] = input_ids[idx+1, :]
                     input_ids[idx+1, :] = self.config.mask_token_id
 
-        return labels
+        return input_ids, labels
     
     def normalize(self, text: str):
         text = text.strip().lower()
@@ -105,12 +104,12 @@ class PinyinTokenizer:
 
         return vec
     
-    def tokenize(self, sentence: str) -> PinyinEncodedTokens:
+    def __call__(self, sentence: str) -> PinyinEncodedTokens:
         sentence_ids = self.encode(sentence)
-        labels = self.create_labels(sentence_ids)
-        attention_mask = self.create_attention_mask(sentence_ids)
+        input_ids, labels = self.create_labels(sentence_ids)
+        # attention_mask = self.create_attention_mask(input_ids)
         return PinyinEncodedTokens(
             input_ids = sentence_ids,
-            attention_mask = attention_mask,
+            # attention_mask = attention_mask,
             labels = labels
         )
