@@ -7,6 +7,7 @@ import os
 import torch
 from torch.utils.data import Dataset
 from .registry import META_DATASET
+from collections import OrderedDict
 
 
 @META_DATASET.register()
@@ -38,7 +39,7 @@ class SubsetDataset(Dataset):
 
         # Dictionary dùng làm Cache để chống I/O bottleneck
         self.max_cache_files = max_cache_files
-        self._file_cache = {}
+        self._file_cache = OrderedDict()
         
         # Count total lines across all subset files
         self.total_lines = self._count_total_lines()
@@ -61,14 +62,16 @@ class SubsetDataset(Dataset):
     
     def _get_line_from_file(self, filepath: str, line_idx: int) -> str:
         """Hàm phụ trợ: Lấy dòng text có sử dụng Cache"""
-        # Nếu file chưa có trong cache, tiến hành đọc từ ổ cứng
-        if filepath not in self._file_cache:
-            # Kiểm tra RAM: Nếu cache đã đầy, xóa file cũ nhất 
+        """Hàm phụ trợ: Lấy dòng text có sử dụng LRU Cache"""
+        
+        # Nếu file đã có trong cache, di chuyển nó xuống cuối để đánh dấu là "Vừa mới sử dụng"
+        if filepath in self._file_cache:
+            self._file_cache.move_to_end(filepath)
+        else:
+            # Nếu cache đầy, xóa phần tử ở đầu (Least Recently Used - Ít sử dụng nhất)
             if len(self._file_cache) >= self.max_cache_files:
-                oldest_filepath = next(iter(self._file_cache))
-                del self._file_cache[oldest_filepath]
+                self._file_cache.popitem(last=False)
             
-            # Đọc file 1 lần và lưu toàn bộ lines vào RAM
             try:
                 with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
                     self._file_cache[filepath] = f.readlines()
@@ -76,7 +79,7 @@ class SubsetDataset(Dataset):
                 print(f"Error reading {filepath}: {e}")
                 self._file_cache[filepath] = []
         
-        # Trích xuất dòng từ RAM thay vì đọc lại từ ổ cứng
+        # Trích xuất dòng
         lines = self._file_cache[filepath]
         if line_idx < len(lines):
             return lines[line_idx].strip()
