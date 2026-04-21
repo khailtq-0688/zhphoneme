@@ -70,18 +70,6 @@ def train_tokenizer_on_subset_files(config, corpus_dir):
     
     vocab_size = tokenizer_config.get('vocab_size', 30000)
     
-    # Create temporary merged file for tokenizer training
-    temp_training_file = Path(corpus_dir) / 'tokenizer_training.txt'
-    logger.info(f"Merging all subset files for tokenizer training...")
-    
-    with open(temp_training_file, 'w', encoding='utf-8') as out_f:
-        for filename in sorted(os.listdir(corpus_dir)):
-            if filename.startswith('subset_') and filename.endswith('.txt'):
-                filepath = os.path.join(corpus_dir, filename)
-                with open(filepath, 'r', encoding='utf-8', errors='ignore') as in_f:
-                    for line in in_f:
-                        out_f.write(line)
-    
     logger.info(f"Training tokenizer (vocab_size={vocab_size})")
     
     tokenizer = UnigramTokenizer(
@@ -90,12 +78,9 @@ def train_tokenizer_on_subset_files(config, corpus_dir):
     )
     
     tokenizer.train(
-        training_files=[str(temp_training_file)],
+        corpus_dir=corpus_dir,
         vocab_size=vocab_size,
     )
-    
-    # Clean up temporary file
-    temp_training_file.unlink()
     
     logger.info(f"✓ Tokenizer saved to {model_prefix}")
     return model_prefix
