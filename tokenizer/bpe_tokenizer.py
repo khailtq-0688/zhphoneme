@@ -53,4 +53,5 @@ class BpeTokenizer:
         self.tokenizer.train_from_iterator(generate_text(), trainer=self.trainer)
 
         # 6. Save
+        os.makedirs(self.model_prefix, exist_ok=True)
         self.tokenizer.save(os.path.join(self.model_prefix, "bpe.json"))
