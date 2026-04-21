@@ -51,6 +51,8 @@ class UnigramTokenizer:
         def generate_text():
             import os
             for txt_file in os.listdir(corpus_dir):
+                if not txt_file.endswith(".txt"):
+                    continue
                 with open(os.path.join(corpus_dir, txt_file)) as file:
                     for line in file:
                         yield line
