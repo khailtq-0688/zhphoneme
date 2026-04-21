@@ -23,7 +23,7 @@ dataset:
   lines_per_file: 1000
 
 tokenizer:
-  type: unigram
+  type: bpe
   model_prefix: ./tokenizers/unigram_tokenizer_vietnamese_subset
   vocab_size: 30000
   character_coverage: 0.9999
