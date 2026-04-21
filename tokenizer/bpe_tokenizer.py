@@ -34,17 +34,9 @@ class BpeTokenizer:
 
     def train(self, corpus_dir):
         def generate_text():
-            import os
-            for txt_file in os.listdir(corpus_dir):
-                if not txt_file.endswith(".txt"):
-                    continue
-                with open(os.path.join(corpus_dir, txt_file)) as file:
-                    for line in file:
-                        yield line
-
-        # 4. Streaming generator
-        def generate_text():
             for fname in os.listdir(corpus_dir):
+                if not fname.endswith(".txt"):
+                    continue
                 with open(os.path.join(corpus_dir, fname), encoding="utf-8") as f:
                     for line in f:
                         yield line.strip()
