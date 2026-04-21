@@ -280,6 +280,8 @@ class MLMPretrainingTask(BasePretrainingTask):
             labels = batch['labels'].to(self.device)
 
             attention_mask = batch['attention_mask'].to(self.device)
+
+            self.optimizer.zero_grad()
             
             _, loss, _ = self.model(input_ids, attention_mask=attention_mask, labels=labels)
             
