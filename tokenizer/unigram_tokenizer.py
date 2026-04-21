@@ -73,6 +73,7 @@ class UnigramTokenizer:
             bos_id=1,
             eos_id=2,
             pad_id=3,
+            user_defined_symbols=['<mask>'],
             num_threads=os.cpu_count(),
             train_extremely_large_corpus=True,
         )

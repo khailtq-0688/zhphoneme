@@ -21,6 +21,7 @@ class TokenizerConfig:
     bos_piece: str = '<s>'
     eos_piece: str = '</s>'
     pad_piece: str = '<pad>'
+    mask_piece: str = '<mask>'
 
 
 @dataclass

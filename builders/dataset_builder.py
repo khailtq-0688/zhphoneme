@@ -185,8 +185,15 @@ class PretrainingDataset(Dataset):
     def __len__(self) -> int:
         return len(self.texts)
     
-    def __getitem__(self, idx: int) -> Dict[str, torch.Tensor]:
+def __getitem__(self, idx: int) -> Dict[str, torch.Tensor]:
         """Get a single item"""
+        
+        UNK_ID = 0
+        BOS_ID = 1
+        EOS_ID = 2
+        PAD_ID = 3
+        MASK_ID = 4  
+        
         text = self.texts[idx]
         
         # Tokenize
@@ -197,11 +204,11 @@ class PretrainingDataset(Dataset):
             tokens = tokens[:self.max_seq_len - 2]
         
         # Add special tokens [BOS] + tokens + [EOS]
-        input_ids = [1] + tokens + [2]
+        input_ids = [BOS_ID] + tokens + [EOS_ID]
         
-        # Pad with [PAD] (id=3)
+        # Pad with [PAD]
         if len(input_ids) < self.max_seq_len:
-            input_ids += [3] * (self.max_seq_len - len(input_ids))
+            input_ids += [PAD_ID] * (self.max_seq_len - len(input_ids))
         
         input_ids = torch.tensor(input_ids, dtype=torch.long)
         
@@ -213,13 +220,11 @@ class PretrainingDataset(Dataset):
             torch.full((self.max_seq_len,), self.mlm_probability)
         ).bool()
         
-        # Don't mask special tokens and padding
-        mask_indices[0] = False          # Don't mask [BOS]
-        mask_indices[input_ids == 2] = False  # Don't mask [EOS]
-        mask_indices[input_ids == 3] = False  # Don't mask [PAD]
+        mask_indices[0] = False                   # Don't mask [BOS] ở vị trí đầu
+        mask_indices[input_ids == EOS_ID] = False # Don't mask [EOS]
+        mask_indices[input_ids == PAD_ID] = False # Don't mask [PAD]
         
-        # Apply masking (mask token id is 0)
-        input_ids[mask_indices] = 0
+        input_ids[mask_indices] = MASK_ID
 
         labels[~mask_indices] = -100
         
