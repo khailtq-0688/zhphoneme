@@ -25,16 +25,16 @@ def build_model(config: ModelConfig, vocab_size: int):
     # Create model
     model = model_class(
         vocab_size=vocab_size,
-        d_model=config.hidden_size,
-        nlayers=config.num_hidden_layers,
-        head=config.num_attention_heads,
-        d_q=config.d_q,
-        d_kv=config.d_kv,
-        d_ff=config.intermediate_size,
-        dropout=config.hidden_dropout_prob,
-        pad_idx=config.tokenizer.model.pad_id(),
-        max_seq_len=config.max_seq_len,
-        label_smoothing=config.label_smoothing,
+        d_model=config.model.d_model,          
+        nlayers=config.model.nlayers,           
+        head=config.model.head,                 
+        d_q=config.model.d_q,                   
+        d_kv=config.model.d_kv,                 
+        d_ff=config.model.d_ff,                 
+        dropout=config.model.dropout,           
+        pad_idx=config.model.pad_idx,           
+        max_seq_len=config.model.max_seq_len,   
+        label_smoothing=config.model.label_smoothing, 
     )
     
     # Move to device
