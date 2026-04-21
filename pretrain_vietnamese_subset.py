@@ -19,6 +19,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from tasks.base_pretraining_task import MLMPretrainingTask
 from configs.config import PretrainingConfig, load_config_from_yaml, dict_to_dotdict
 from tokenizer.unigram_tokenizer import UnigramTokenizer
+from tokenizer.bpe_tokenizer import BpeTokenizer
 from builders.registry import META_ARCHITECTURE
 from builders.model_builder import build_model
 from builders.dataset_builder import SubsetDataset, collate_fn
@@ -59,47 +60,11 @@ def train_tokenizer_on_subset_files(config, corpus_dir):
     tokenizer_config = config.get('tokenizer', {})
     model_prefix = tokenizer_config.get('model_prefix', './tokenizers/unigram_tokenizer_vietnamese_subset')
     
-    model_file = f"{model_prefix}.model"
-    if Path(model_file).exists():
-        logger.info(f"Tokenizer already exists at {model_file}")
-        return model_prefix
+    tokenizer_wrapper =BpeTokenizer(model_prefix)
     
-    logger.info("="*60)
-    logger.info("Training Tokenizer on All Subset Files")
-    logger.info("="*60)
-    
-    vocab_size = tokenizer_config.get('vocab_size', 30000)
-    
-    # Create temporary merged file for tokenizer training
-    temp_training_file = Path(corpus_dir) / 'tokenizer_training.txt'
-    logger.info(f"Merging all subset files for tokenizer training...")
-    
-    with open(temp_training_file, 'w', encoding='utf-8') as out_f:
-        for filename in sorted(os.listdir(corpus_dir)):
-            if filename.startswith('subset_') and filename.endswith('.txt'):
-                filepath = os.path.join(corpus_dir, filename)
-                with open(filepath, 'r', encoding='utf-8', errors='ignore') as in_f:
-                    for line in in_f:
-                        out_f.write(line)
-    
-    logger.info(f"Training tokenizer (vocab_size={vocab_size})")
-    
-    tokenizer = UnigramTokenizer(
-        model_prefix=model_prefix,
-        vocab_size=vocab_size
-    )
-    
-    tokenizer.train(
-        training_files=[str(temp_training_file)],
-        vocab_size=vocab_size,
-    )
-    
-    # Clean up temporary file
-    temp_training_file.unlink()
-    
-    logger.info(f"✓ Tokenizer saved to {model_prefix}")
-    return model_prefix
+    tokenizer_wrapper.train(corpus_dir)
 
+    return tokenizer_wrapper.get_tokenizer()
 
 def main():
     parser = ArgumentParser(description='Vietnamese Pretraining on Subset Format Corpus')
@@ -141,33 +106,16 @@ def main():
     logger.info(f"Using device: {device}")
     
     # Resolve corpus directory
-    corpus_dir = Path(args.corpus_dir)
-    if not corpus_dir.is_absolute():
-        corpus_dir = Path(__file__).parent / corpus_dir
+    corpus_dir = args.corpus_dir
+    if not os.path.isdir(corpus_dir):
+        corpus_dir = os.path.join(Path(__file__).parent, corpus_dir)
     
-    if not corpus_dir.exists():
+    if not os.path.isdir(corpus_dir):
         raise FileNotFoundError(f"Corpus directory not found: {corpus_dir}")
     
-    subset_files = list(corpus_dir.glob('subset_*.txt'))
-    logger.info(f"Corpus directory: {corpus_dir}")
-    logger.info(f"Found {len(subset_files)} subset files")
-    
     # Train or load tokenizer
-    if not args.no_tokenizer:
-        tokenizer_prefix = train_tokenizer_on_subset_files(config, corpus_dir)
-        tokenizer_path = f"{tokenizer_prefix}.model"
-    else:
-        tokenizer_path = Path('./tokenizers/unigram_tokenizer_vietnamese_subset.model')
-        if not tokenizer_path.exists():
-            raise FileNotFoundError(f"Tokenizer not found: {tokenizer_path}")
-    
-    logger.info("="*60)
-    logger.info("Loading Tokenizer")
-    logger.info("="*60)
-    
-    tokenizer = UnigramTokenizer()
-    tokenizer.load(str(tokenizer_path))
-    logger.info(f"✓ Tokenizer loaded from {tokenizer_path}")
+    logger.info(f"Loading tokenizer")
+    tokenizer = train_tokenizer_on_subset_files(config, corpus_dir)
     
     # Create dataset from all subset files
     logger.info("="*60)

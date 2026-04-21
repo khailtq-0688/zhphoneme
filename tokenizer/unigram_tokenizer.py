@@ -35,7 +35,7 @@ class UnigramTokenizer:
         self.vocab_size = vocab_size
         self.model = None
         
-    def train(self, training_files: List[str], vocab_size: int = None):
+    def train(self, corpus_dir: str, vocab_size: int = None):
         """
         Train Unigram tokenizer on corpus
         
@@ -48,12 +48,18 @@ class UnigramTokenizer:
             
         logger.info(f"Training Unigram tokenizer with vocab size: {vocab_size}")
         
-        # Create training file list
-        input_files = ','.join(training_files)
+        def generate_text():
+            import os
+            for txt_file in os.listdir(corpus_dir):
+                if not txt_file.endswith(".txt"):
+                    continue
+                with open(os.path.join(corpus_dir, txt_file)) as file:
+                    for line in file:
+                        yield line
         
         # Train SentencePiece model with Unigram
         spm.SentencePieceTrainer.train(
-            input=input_files,
+            sentence_iterator=generate_text(),
             model_prefix=self.model_prefix,
             vocab_size=vocab_size,
             model_type='unigram',
@@ -68,7 +74,7 @@ class UnigramTokenizer:
             eos_id=2,
             pad_id=3,
             num_threads=os.cpu_count(),
-            train_extremely_large_corpus=False,
+            train_extremely_large_corpus=True,
         )
         
         logger.info(f"Tokenizer saved to {self.model_prefix}")
