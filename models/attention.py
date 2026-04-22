@@ -101,7 +101,7 @@ class PhrasalLexemeAttention(nn.Module):
 
         if attention_mask is not None:
             attention_mask = attention_mask.unsqueeze(1).unsqueeze(1)
-            attention_mask = attention_mask & (after_attention_mask + prev_attention_mask)
+            attention_mask = (attention_mask.bool() & (after_attention_mask.bool() | prev_attention_mask.bool())).to(attention_mask.dtype)
         else:
             attention_mask = after_attention_mask + prev_attention_mask
             attention_mask = attention_mask.unsqueeze(0).unsqueeze(1)
