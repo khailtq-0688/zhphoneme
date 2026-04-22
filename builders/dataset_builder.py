@@ -100,7 +100,9 @@ class SubsetDataset(Dataset):
             return self._empty_sample()
         
         # Tokenize
-        tokens = self.tokenizer.encode(text)
+        encode_result = self.tokenizer.encode(text)
+
+        tokens = encode_result.ids if hasattr(encode_result, 'ids') else encode_result
         
         # Truncate
         if len(tokens) > self.max_seq_len - 2:
