@@ -46,10 +46,10 @@ dataloader = DataLoader(
 )
 model = PinyinBert(config).to(device)
 model.train()
-optimizer = torch.optim.AdamW(model.parameters(), lr=6e-4, weight_decay=0.01, betas=(0.9, 0.98), eps=10e-6)
+optimizer = torch.optim.AdamW(model.parameters(), lr=5e-5, weight_decay=0.01, betas=(0.9, 0.999), eps=1e-6)
 
 total_steps = 1_000_000
-warmup_steps = int(total_steps * 0.05)
+warmup_steps = int(total_steps * 0.10)
 
 print(f"Total steps: {total_steps}")
 
