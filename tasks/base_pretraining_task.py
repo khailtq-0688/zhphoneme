@@ -91,9 +91,9 @@ class BasePretrainingTask:
     def _setup_optimizer(self, config):
         """Setup optimizer and learning rate scheduler"""
         optimizer_type = config.get('optimizer', 'adamw').lower()
-        learning_rate = config.get('learning_rate', 6e-4)
+        learning_rate = config.get('learning_rate', 5e-5)
         weight_decay = config.get('weight_decay', 0.01)
-        betas = config.get('betas', (0.9, 0.98))
+        betas = config.get('betas', (0.9, 0.999))
         eps = config.get('eps', 1e-6)
         
         if optimizer_type == 'adamw':
@@ -112,7 +112,7 @@ class BasePretrainingTask:
         
         # Setup scheduler with warmup + linear decay
         # Will be properly calculated in training loop with actual total_steps
-        self.total_steps = 10000  # Placeholder, will be updated
+        self.total_steps = 1000000  # Placeholder, will be updated
         self.warmup_steps = None  # Will be calculated as 5% of total_steps
         
         def lr_lambda(current_step):
@@ -137,7 +137,7 @@ class BasePretrainingTask:
         
         dataloader = DataLoader(
             dataset,
-            batch_size=config.training.get('batch_size', 32),
+            batch_size=config.training.get('batch_size', 64),
             shuffle=True,
             num_workers=config.training.get('num_workers', 4),
             collate_fn=collate_fn,
@@ -233,12 +233,12 @@ class MLMPretrainingTask(BasePretrainingTask):
         
         # Calculate and set actual total steps for scheduler
         self.total_steps = len(train_dataloader) * num_epochs
-        self.warmup_steps = int(self.total_steps * 0.05)  # 5% of total steps
+        self.warmup_steps = int(self.total_steps * 0.10)  # 10% of total steps
         
         self.logger.info(f"Total steps: {self.total_steps}")
-        self.logger.info(f"Warmup steps: {self.warmup_steps} (5% of total)")
-        self.logger.info(f"Batch size: {self.config.get('batch_size', 32)}")
-        self.logger.info(f"Learning rate: {self.config.get('learning_rate', 6e-4)}")
+        self.logger.info(f"Warmup steps: {self.warmup_steps} (10% of total)")
+        self.logger.info(f"Batch size: {self.config.get('batch_size', 64)}")
+        self.logger.info(f"Learning rate: {self.config.get('learning_rate', 5e-5)}")
         self.logger.info(f"Scheduler: LambdaLR with linear warmup and decay")
         
         for epoch in range(num_epochs):
