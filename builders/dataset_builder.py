@@ -128,8 +128,10 @@ class SubsetDataset(Dataset):
         mask_indices[input_ids == 2] = False  # Don't mask [EOS]
         mask_indices[input_ids == 3] = False  # Don't mask [PAD]
         
-        # Apply masking (mask token id is 0)
-        input_ids[mask_indices] = 0
+        # Apply masking (mask token id is 4)
+        input_ids[mask_indices] = 4
+
+        labels[~mask_indices] = -100
         
         return {
             'input_ids': input_ids,
@@ -139,7 +141,7 @@ class SubsetDataset(Dataset):
     def _empty_sample(self) -> Dict[str, torch.Tensor]:
         """Return empty sample filled with padding"""
         input_ids = torch.full((self.max_seq_len,), 3, dtype=torch.long)  # All PAD
-        labels = input_ids.clone()
+        labels = torch.full((self.max_seq_len,), -100, dtype=torch.long)  # Bỏ qua hoàn toàn
         return {
             'input_ids': input_ids,
             'labels': labels,
@@ -188,7 +190,7 @@ class PretrainingDataset(Dataset):
     def __len__(self) -> int:
         return len(self.texts)
     
-def __getitem__(self, idx: int) -> Dict[str, torch.Tensor]:
+    def __getitem__(self, idx: int) -> Dict[str, torch.Tensor]:
         """Get a single item"""
         
         UNK_ID = 0
