@@ -71,10 +71,10 @@ class DataConfig:
 class TrainingConfig:
     """Training Configuration"""
     # Training parameters
-    batch_size: int = 512
+    batch_size: int = 64
     gradient_accumulation_steps: int = 1
     num_epochs: int = 5
-    learning_rate: float = 6e-4
+    learning_rate: float = 5e-5
     weight_decay: float = 0.01
     # warmup_steps will be calculated dynamically as 5% of total_steps
     max_steps: int = -1  # -1 means no limit
@@ -85,7 +85,7 @@ class TrainingConfig:
     gradient_clip_norm: float = 1.0
     
     # AdamW specific
-    betas: tuple = (0.9, 0.98)
+    betas: tuple = (0.9, 0.999)
     eps: float = 1e-6
     
     # Checkpointing and logging
@@ -211,8 +211,8 @@ if __name__ == "__main__":
     # Customize as needed
     config.model.vocab_size = 30000
     config.model.d_model = 768
-    config.training.batch_size = 32
-    config.training.num_epochs = 3
+    config.training.batch_size = 64
+    config.training.num_epochs = 5
     
     # Save configuration
     config.save("./config.json")

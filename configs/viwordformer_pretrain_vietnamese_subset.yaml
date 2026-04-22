@@ -33,15 +33,15 @@ training:
   # Optimization
   optimizer: adamw
   scheduler: lambda
-  learning_rate: 6.0e-4
+  learning_rate: 0.00005
   weight_decay: 0.01
-  betas: [0.9, 0.98]
-  eps: 1.0e-6
+  betas: [0.9, 0.999]
+  eps: 0.000001
   gradient_clip_norm: 1.0
   gradient_accumulation_steps: 1
   
   # Training parameters
-  batch_size: 512
+  batch_size: 64
   num_epochs: 5
   num_workers: 4
   
