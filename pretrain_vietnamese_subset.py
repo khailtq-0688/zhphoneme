@@ -150,6 +150,7 @@ def main():
     logger.info("="*60)
     
     training_config = dict_to_dotdict({
+        'model': config.model,
         'device': device,
         'tokenizer': tokenizer,
         'checkpoint_dir': Path('./checkpoints/vietnamese_subset_pretrain'),
