@@ -41,8 +41,8 @@ training:
   gradient_accumulation_steps: 1
   
   # Training parameters
-  batch_size: 64
-  num_epochs: 5
+  batch_size: 60
+  num_epochs: 100
   num_workers: 4
   
   # Warmup will be calculated as 5% of total_steps dynamically
