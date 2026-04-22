@@ -22,7 +22,7 @@ from tokenizer.unigram_tokenizer import UnigramTokenizer
 from builders.registry import META_ARCHITECTURE
 from builders.model_builder import build_model
 from builders.dataset_builder import SubsetDataset, collate_fn
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, random_split
 
 # Setup logging
 logging.basicConfig(
@@ -171,19 +171,38 @@ def main():
         lines_per_file=config.get('dataset', {}).get('lines_per_file', 1000)
     )
     
-    logger.info(f"✓ SubsetDataset created with {len(dataset)} total samples")
+    val_size = int(0.1 * len(dataset))
+    train_size = len(dataset) - val_size
+
+    train_dataset, val_dataset = random_split(
+        dataset, 
+        [train_size, val_size],
+        generator=torch.Generator().manual_seed(42) # Cố định seed để dễ tái lập
+    )
+
+    logger.info(f"✓ Split dataset: {train_size} train samples, {val_size} val samples")
     
     # Create dataloader
     batch_size = config.get('training', {}).get('batch_size', 32)
-    dataloader = DataLoader(
-        dataset=dataset,
+    train_dataloader = DataLoader(
+        dataset=train_dataset,
         batch_size=batch_size,
         shuffle=True,
         num_workers=4,
         collate_fn=collate_fn,
         pin_memory=True if device == 'cuda' else False
     )
-    logger.info(f"✓ DataLoader created: {len(dataloader)} batches per epoch")
+
+    val_dataloader = DataLoader(
+        dataset=val_dataset,
+        batch_size=batch_size,
+        shuffle=False, # Val không cần shuffle
+        num_workers=4,
+        collate_fn=collate_fn,
+        pin_memory=True if device == 'cuda' else False
+    )
+
+    logger.info(f"✓ DataLoader created: {len(train_dataloader)} batches per epoch")
     
     # Create training task and train
     logger.info("="*60)
@@ -228,7 +247,8 @@ def main():
     # Train with the dataloader
     task.train(
         num_epochs=training_config.num_epochs,
-        train_dataloader=dataloader
+        train_dataloader=train_dataloader,
+        val_dataloader=val_dataloader
     )
     
     logger.info("="*60)

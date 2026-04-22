@@ -45,9 +45,6 @@ training:
   num_epochs: 100
   num_workers: 4
   
-  # Warmup will be calculated as 5% of total_steps dynamically
-  # warmup_steps formula: int(total_steps * 0.05)
-  
   # Checkpoint settings
   save_steps: 1000
   eval_steps: 2000
