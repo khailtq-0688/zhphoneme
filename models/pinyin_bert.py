@@ -31,7 +31,7 @@ class PinyinBert(PreTrainedModel):
         self.fc_tone = nn.Linear(config.hidden_size, config.vocab_size)
         
         # 4. HÀM LOSS CHUNG
-        self.loss_fn = nn.CrossEntropyLoss(ignore_index=self.config.pad_token_id)
+        self.loss_fn = nn.CrossEntropyLoss(ignore_index=-100)
 
         self.init_weights()
 
