@@ -6,7 +6,7 @@ from vocabs.pinyin_tokenizer import PinyinEncodedTokens
 
 import os
 
-PAD_TOKEN_ID = 0
+PAD_TOKEN_ID = -100
 
 def collate_fn(samples: list[PinyinEncodedTokens]):
     # Extract tensors
@@ -17,7 +17,7 @@ def collate_fn(samples: list[PinyinEncodedTokens]):
     input_ids = pad_sequence(
         input_ids_list,
         batch_first=True,
-        padding_value=PAD_TOKEN_ID
+        padding_value=0
     )
 
     labels = pad_sequence(
@@ -27,7 +27,7 @@ def collate_fn(samples: list[PinyinEncodedTokens]):
     )
 
     # Attention mask: 1 where not PAD
-    attention_mask = (input_ids[..., 0] != PAD_TOKEN_ID).long()
+    attention_mask = (input_ids[..., 0] != 0).long()
 
     return PinyinEncodedTokens(
         input_ids=input_ids,
