@@ -11,7 +11,7 @@ from data_utils.pinyin_dataset import collate_fn
 from tqdm import tqdm
 import os
 
-BS = 256
+BS = 64
 CHECKPOINT = "pinyin_bert_weights"
 MODEL_NAME = "pinyin_bert_base"
 
