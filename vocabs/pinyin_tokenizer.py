@@ -43,7 +43,7 @@ class PinyinTokenizer:
         return mask
     
     def create_labels(self, input_ids: torch.Tensor):
-        labels = torch.zeros_like(input_ids).fill_(-100).long()
+        labels = torch.zeros_like(input_ids).fill_(self.config.pad_token_id).long()
         length, _ = input_ids.shape
         for idx in range(length-1):
             token_id = input_ids[idx+1, 0]
