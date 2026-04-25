@@ -6,7 +6,7 @@ from vocabs.pinyin_tokenizer import PinyinEncodedTokens
 
 import os
 
-PAD_TOKEN_ID = -100  # Using -100 for ignore_index in CrossEntropyLoss
+PAD_TOKEN_ID = 0
 
 def collate_fn(samples: list[PinyinEncodedTokens]):
     # Extract tensors
@@ -17,7 +17,7 @@ def collate_fn(samples: list[PinyinEncodedTokens]):
     input_ids = pad_sequence(
         input_ids_list,
         batch_first=True,
-        padding_value=0
+        padding_value=PAD_TOKEN_ID
     )
 
     labels = pad_sequence(
@@ -27,7 +27,7 @@ def collate_fn(samples: list[PinyinEncodedTokens]):
     )
 
     # Attention mask: 1 where not PAD
-    attention_mask = (input_ids[..., 0] != 0).long()
+    attention_mask = (input_ids[..., 0] != PAD_TOKEN_ID).long()
 
     return PinyinEncodedTokens(
         input_ids=input_ids,
