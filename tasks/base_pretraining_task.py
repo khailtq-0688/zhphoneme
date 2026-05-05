@@ -55,6 +55,18 @@ class BasePretrainingTask:
             self.logger.info("Building model from scratch...")
             self.model = build_model(config, vocab_size=config.tokenizer.get_vocab_size())
         self.model.to(self.device)
+
+        # --- CHÈN CODE TỐI ƯU Ở ĐÂY ---
+        if hasattr(torch, 'compile'):
+            self.logger.info(">>> Đang kích hoạt torch.compile (JIT Optimization)...")
+            try:
+                # 'reduce-overhead' rất tốt cho các model cỡ BERT-base như ViWordFormer
+                # Nếu gặp lỗi trên Windows, bạn có thể đổi thành mode='default'
+                self.model = torch.compile(self.model, mode="reduce-overhead")
+                self.logger.info(">>> torch.compile đã được thiết lập thành công!")
+            except Exception as e:
+                self.logger.warning(f">>> Cảnh báo: torch.compile không khả dụng: {e}")
+        # ------------------------------
         
         # Log model info
         total_params = sum(p.numel() for p in self.model.parameters())
