@@ -21,7 +21,7 @@ class SubsetDataset(Dataset):
     
     def __init__(self, corpus_dir: str, tokenizer, max_seq_len: int = 512, 
                  mlm_probability: float = 0.15, lines_per_file: int = 1000,
-                 max_cache_files: int = 4000):
+                 max_cache_files: int = 4000, mask_id: int = 4):
         """
         Initialize subset dataset
         
@@ -37,6 +37,7 @@ class SubsetDataset(Dataset):
         self.max_seq_len = max_seq_len
         self.mlm_probability = mlm_probability
         self.lines_per_file = lines_per_file
+        self.mask_id = mask_id
 
         # Dictionary dùng làm Cache để chống I/O bottleneck
         self.max_cache_files = max_cache_files
@@ -129,7 +130,7 @@ class SubsetDataset(Dataset):
         mask_indices[-1] = False # Phần tử cuối cùng là EOS
         
         # Apply masking (mask token id là 4)
-        input_ids[mask_indices] = 4
+        input_ids[mask_indices] = self.mask_id
         labels[~mask_indices] = -100
         
         return {
@@ -155,7 +156,7 @@ class PretrainingDataset(Dataset):
     """
     
     def __init__(self, file_path: str, tokenizer, max_seq_len: int = 512, 
-                 mlm_probability: float = 0.15):
+                 mlm_probability: float = 0.15, mask_id: int = 4):
         """
         Initialize pretraining dataset
         
@@ -169,6 +170,7 @@ class PretrainingDataset(Dataset):
         self.tokenizer = tokenizer
         self.max_seq_len = max_seq_len
         self.mlm_probability = mlm_probability
+        self.mask_id = mask_id
         
         # Load all texts
         self.texts = self._load_texts()
@@ -219,7 +221,7 @@ class PretrainingDataset(Dataset):
         mask_indices[0] = False 
         mask_indices[-1] = False
         
-        input_ids[mask_indices] = 4 # MASK_ID
+        input_ids[mask_indices] = self.mask_id # MASK_ID
         labels[~mask_indices] = -100
         
         return {'input_ids': input_ids, 'labels': labels}
