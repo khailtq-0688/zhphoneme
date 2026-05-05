@@ -122,25 +122,25 @@ class SubsetDataset(Dataset):
         #     input_ids += [3] * (self.max_seq_len - len(input_ids))
             
         input_ids = torch.tensor(input_ids, dtype=torch.long)
-        labels = input_ids.clone()
+        # labels = input_ids.clone()
         
-        # ✅ Tạo mask dựa trên ĐỘ DÀI THỰC TẾ của câu hiện tại, không dùng max_seq_len nữa
-        seq_len = len(input_ids)
-        mask_indices = torch.bernoulli(
-            torch.full((seq_len,), self.mlm_probability)
-        ).bool()
+        # # ✅ Tạo mask dựa trên ĐỘ DÀI THỰC TẾ của câu hiện tại, không dùng max_seq_len nữa
+        # seq_len = len(input_ids)
+        # mask_indices = torch.bernoulli(
+        #     torch.full((seq_len,), self.mlm_probability)
+        # ).bool()
         
-        # Không mask [BOS] và [EOS]
-        mask_indices[0] = False 
-        mask_indices[-1] = False # Phần tử cuối cùng là EOS
+        # # Không mask [BOS] và [EOS]
+        # mask_indices[0] = False 
+        # mask_indices[-1] = False # Phần tử cuối cùng là EOS
         
-        # Apply masking (mask token id là 4)
-        input_ids[mask_indices] = self.mask_id
-        labels[~mask_indices] = -100
+        # # Apply masking (mask token id là 4)
+        # input_ids[mask_indices] = self.mask_id
+        # labels[~mask_indices] = -100
         
         return {
             'input_ids': input_ids,
-            'labels': labels,
+            # 'labels': labels,
         }
     
     def _empty_sample(self) -> Dict[str, torch.Tensor]:
@@ -283,24 +283,40 @@ def build_dataset(config: Dict[str, Any], tokenizer, split: str = 'train'):
 def collate_fn(batch):
     """
     Collate function for DataLoader
-    Handles variable-length sequences with padding and attention masks
-    
-    Args:
-        batch: List of samples from dataset
-        
-    Returns:
-        Dictionary with padded input_ids, labels, and attention_mask
+    Đã được tối ưu: Xử lý Vectorized MLM Masking cho toàn bộ Batch cùng lúc.
     """
-    PAD_TOKEN_ID = 3 
+    PAD_TOKEN_ID = 3
+    MASK_TOKEN_ID = 4
+    MLM_PROB = 0.15 # Có thể lấy từ config nếu bạn muốn truyền qua closure
     
-    # Lấy danh sách các tensor động
+    # Lấy danh sách input_ids
     input_ids_list = [sample['input_ids'] for sample in batch]
-    labels_list = [sample['labels'] for sample in batch]
     
-    # Pad động theo câu dài nhất TRONG BATCH
+    # Pad sequence để tạo thành 1 ma trận Batch hoàn chỉnh
     input_ids = pad_sequence(input_ids_list, batch_first=True, padding_value=PAD_TOKEN_ID)
-    labels = pad_sequence(labels_list, batch_first=True, padding_value=-100)
     
+    # Khởi tạo labels từ ma trận vừa pad
+    labels = input_ids.clone()
+    
+    # --- BẮT ĐẦU VECTORIZED MLM MASKING ---
+    # 1. Tạo ma trận xác suất có cùng kích thước với input_ids
+    probability_matrix = torch.full(labels.shape, MLM_PROB)
+    
+    # 2. Không mask các token đặc biệt (BOS=1, EOS=2, PAD=3)
+    special_tokens_mask = (input_ids == 1) | (input_ids == 2) | (input_ids == PAD_TOKEN_ID)
+    probability_matrix.masked_fill_(special_tokens_mask, value=0.0)
+    
+    # 3. Tung đồng xu (Bernoulli) 1 lần cho cả ma trận
+    masked_indices = torch.bernoulli(probability_matrix).bool()
+    
+    # 4. Cập nhật labels (chỗ nào KHÔNG bị mask thì set thành -100 để ignore loss)
+    labels[~masked_indices] = -100
+    
+    # 5. Thay thế các token bị mask bằng MASK_TOKEN_ID
+    input_ids[masked_indices] = MASK_TOKEN_ID
+    # ----------------------------------------
+    
+    # Tạo attention mask
     attention_mask = (input_ids != PAD_TOKEN_ID).float()
     
     return {
