@@ -142,6 +142,9 @@ class ViWordFormer(nn.Module):
             in_features=d_model,
             out_features=vocab_size
         )
+
+        self.proj_vocab.weight = self.embedding.weight
+
         self.dropout = nn.Dropout(dropout)
         
         self.loss = nn.CrossEntropyLoss(ignore_index=-100, label_smoothing=label_smoothing)
