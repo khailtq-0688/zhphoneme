@@ -306,7 +306,13 @@ class MLMPretrainingTask(BasePretrainingTask):
         # Khởi tạo các tham số Early Stopping
         best_val_loss = float('inf')
         patience_counter = 0
-        max_patience = self.config.training.get('patience', 5) # Lấy từ config
+        
+        if hasattr(self.config, 'training') and isinstance(self.config.training, dict):
+            max_patience = self.config.training.get('patience', 5)
+        else:
+            # Trường hợp config đã được làm phẳng hoặc truyền trực tiếp vào MLMPretrainingTask
+            max_patience = self.config.get('patience', 5)
+
         for epoch in range(num_epochs):
             self.epoch = epoch
             self.logger.info(f"Epoch {epoch + 1}/{num_epochs}")
