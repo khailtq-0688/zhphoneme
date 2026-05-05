@@ -193,21 +193,21 @@ class BasePretrainingTask:
             
         model_file = os.path.join(checkpoint_path, 'model.pt')
         if os.path.exists(model_file):
-            # Nạp dữ liệu checkpoint vào thiết bị hiện tại[cite: 3]
+            # Nạp dữ liệu checkpoint vào thiết bị hiện tại
             checkpoint = torch.load(model_file, map_location=self.device)
             
-            # Khôi phục trọng số mô hình và optimizer[cite: 3]
+            # Khôi phục trọng số mô hình và optimizer
             self.model.load_state_dict(checkpoint['model_state_dict'])
             self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
             if 'scheduler_state_dict' in checkpoint:
                 self.scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
             
-            # Khôi phục các biến tiến trình[cite: 3]
+            # Khôi phục các biến tiến trình
             self.epoch = checkpoint.get('epoch', 0)
             self.global_step = checkpoint.get('global_step', 0)
             self.best_loss = checkpoint.get('best_loss', float('inf'))
             
-            # ✅ Khôi phục RNG States[cite: 2, 4]
+            # ✅ Khôi phục RNG States
             torch.set_rng_state(checkpoint['torch_rng_state'].cpu())
             if checkpoint['cuda_rng_state'] is not None and torch.cuda.is_available():
                 torch.cuda.set_rng_state(checkpoint['cuda_rng_state'].cpu())
