@@ -8,6 +8,7 @@ import torch
 from torch.utils.data import Dataset
 from .registry import META_DATASET
 from collections import OrderedDict
+from torch.nn.utils.rnn import pad_sequence
 
 
 @META_DATASET.register()
@@ -101,38 +102,34 @@ class SubsetDataset(Dataset):
         
         # Tokenize
         encode_result = self.tokenizer.encode(text)
-
         tokens = encode_result.ids if hasattr(encode_result, 'ids') else encode_result
         
-        # Truncate
+        # Truncate (chỉ cắt bớt nếu vượt quá max_seq_len)
         if len(tokens) > self.max_seq_len - 2:
             tokens = tokens[:self.max_seq_len - 2]
-        
-        # Add special tokens [BOS] + tokens + [EOS]
+            
+        # Thêm special tokens [BOS] + tokens + [EOS]
         input_ids = [1] + tokens + [2]
         
-        # Pad with [PAD] (id=3)
-        if len(input_ids) < self.max_seq_len:
-            input_ids += [3] * (self.max_seq_len - len(input_ids))
-        
+        # ❌ XÓA BỎ ĐOẠN STATIC PADDING DƯỚI ĐÂY:
+        # if len(input_ids) < self.max_seq_len:
+        #     input_ids += [3] * (self.max_seq_len - len(input_ids))
+            
         input_ids = torch.tensor(input_ids, dtype=torch.long)
-        
-        # Create labels (masked language modeling)
         labels = input_ids.clone()
         
-        # Randomly select tokens to mask
+        # ✅ Tạo mask dựa trên ĐỘ DÀI THỰC TẾ của câu hiện tại, không dùng max_seq_len nữa
+        seq_len = len(input_ids)
         mask_indices = torch.bernoulli(
-            torch.full((self.max_seq_len,), self.mlm_probability)
+            torch.full((seq_len,), self.mlm_probability)
         ).bool()
         
-        # Don't mask special tokens and padding
-        mask_indices[0] = False          # Don't mask [BOS]
-        mask_indices[input_ids == 2] = False  # Don't mask [EOS]
-        mask_indices[input_ids == 3] = False  # Don't mask [PAD]
+        # Không mask [BOS] và [EOS]
+        mask_indices[0] = False 
+        mask_indices[-1] = False # Phần tử cuối cùng là EOS
         
-        # Apply masking (mask token id is 4)
+        # Apply masking (mask token id là 4)
         input_ids[mask_indices] = 4
-
         labels[~mask_indices] = -100
         
         return {
@@ -141,9 +138,9 @@ class SubsetDataset(Dataset):
         }
     
     def _empty_sample(self) -> Dict[str, torch.Tensor]:
-        """Return empty sample filled with padding"""
-        input_ids = torch.full((self.max_seq_len,), 3, dtype=torch.long)  # All PAD
-        labels = torch.full((self.max_seq_len,), -100, dtype=torch.long)  # Bỏ qua hoàn toàn
+        """Trả về sample rỗng chỉ chứa [BOS, EOS] thay vì 512 token PAD"""
+        input_ids = torch.tensor([1, 2], dtype=torch.long)  # Chỉ [BOS, EOS]
+        labels = torch.tensor([-100, -100], dtype=torch.long)
         return {
             'input_ids': input_ids,
             'labels': labels,
@@ -212,33 +209,20 @@ class PretrainingDataset(Dataset):
         
         # Add special tokens [BOS] + tokens + [EOS]
         input_ids = [BOS_ID] + tokens + [EOS_ID]
-        
-        # Pad with [PAD]
-        if len(input_ids) < self.max_seq_len:
-            input_ids += [PAD_ID] * (self.max_seq_len - len(input_ids))
-        
         input_ids = torch.tensor(input_ids, dtype=torch.long)
         
-        # Create labels (masked language modeling)
         labels = input_ids.clone()
+        seq_len = len(input_ids)
         
-        # Randomly select tokens to mask
-        mask_indices = torch.bernoulli(
-            torch.full((self.max_seq_len,), self.mlm_probability)
-        ).bool()
+        # Mask động dựa trên seq_len thực tế
+        mask_indices = torch.bernoulli(torch.full((seq_len,), self.mlm_probability)).bool()
+        mask_indices[0] = False 
+        mask_indices[-1] = False
         
-        mask_indices[0] = False                   # Don't mask [BOS] ở vị trí đầu
-        mask_indices[input_ids == EOS_ID] = False # Don't mask [EOS]
-        mask_indices[input_ids == PAD_ID] = False # Don't mask [PAD]
-        
-        input_ids[mask_indices] = MASK_ID
-
+        input_ids[mask_indices] = 4 # MASK_ID
         labels[~mask_indices] = -100
         
-        return {
-            'input_ids': input_ids,
-            'labels': labels,
-        }
+        return {'input_ids': input_ids, 'labels': labels}
 
 
 def build_dataset(config: Dict[str, Any], tokenizer, split: str = 'train'):
@@ -288,10 +272,15 @@ def collate_fn(batch):
     Returns:
         Dictionary with padded input_ids, labels, and attention_mask
     """
-    PAD_TOKEN_ID = 3  # Padding token id
+    PAD_TOKEN_ID = 3 
     
-    input_ids = torch.stack([sample['input_ids'] for sample in batch])
-    labels = torch.stack([sample['labels'] for sample in batch])
+    # Lấy danh sách các tensor động
+    input_ids_list = [sample['input_ids'] for sample in batch]
+    labels_list = [sample['labels'] for sample in batch]
+    
+    # Pad động theo câu dài nhất TRONG BATCH
+    input_ids = pad_sequence(input_ids_list, batch_first=True, padding_value=PAD_TOKEN_ID)
+    labels = pad_sequence(labels_list, batch_first=True, padding_value=-100)
     
     attention_mask = (input_ids != PAD_TOKEN_ID).float()
     
