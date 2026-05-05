@@ -372,16 +372,19 @@ class MLMPretrainingTask(BasePretrainingTask):
 
             attention_mask = batch['attention_mask'].to(self.device)
 
-            self.optimizer.zero_grad()
+            self.optimizer.zero_grad(set_to_none=True)
             
-            with torch.amp.autocast('cuda'):
+            with torch.amp.autocast(device_type='cuda', dtype=torch.bfloat16):
                 _, loss, _ = self.model(input_ids, attention_mask=attention_mask, labels=labels)
             
-            self.scaler.scale(loss).backward()
+            # self.scaler.scale(loss).backward()
+            loss.backward()
             
             # Optimizer & Scheduler step
-            self.scaler.step(self.optimizer)
-            self.scaler.update()
+            # self.scaler.step(self.optimizer)
+            # self.scaler.update()
+            # self.scheduler.step()
+            self.optimizer.step()
             self.scheduler.step()
 
             self.global_step += 1

@@ -13,6 +13,8 @@ from argparse import ArgumentParser
 import yaml
 import torch
 
+torch.set_float32_matmul_precision('high')
+
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent))
 
