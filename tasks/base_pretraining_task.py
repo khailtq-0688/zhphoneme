@@ -91,7 +91,7 @@ class BasePretrainingTask:
     def _setup_optimizer(self, config):
         """Setup optimizer and Noam Learning Rate Scheduler"""
         optimizer_type = config.get('optimizer', 'adamw').lower()
-        learning_rate = config.get('learning_rate', 1.0) # Với Noam, LR gốc thường để 1.0 vì công thức đã tự scale
+        learning_rate = config.get('learning_rate', 5e-5) 
         weight_decay = config.get('weight_decay', 0.01)
         betas = config.get('betas', (0.9, 0.98)) # Theo paper ViWordFormer là (0.9, 0.98)
         eps = config.get('eps', 1e-9)
@@ -110,12 +110,28 @@ class BasePretrainingTask:
         else:
             self.optimizer = Adam(self.model.parameters(), lr=learning_rate)
 
-        # Định nghĩa Noam Scheduler theo công thức trong paper
+        # # Định nghĩa Noam Scheduler theo công thức trong paper
+        # def lr_lambda(current_step):
+        #     step = current_step + 1
+        #     # Công thức: (d_model^-0.5) * min(step^-0.5, step * warmup^-1.5)
+        #     return (d_model ** -0.5) * min(step ** -0.5, step * (self.warmup_steps ** -1.5))
+            
+        # self.scheduler = LambdaLR(self.optimizer, lr_lambda)
+
+    def _setup_scheduler(self):
+        """Setup Normalized Noam Scheduler"""
         def lr_lambda(current_step):
             step = current_step + 1
-            # Công thức: (d_model^-0.5) * min(step^-0.5, step * warmup^-1.5)
-            return (d_model ** -0.5) * min(step ** -0.5, step * (self.warmup_steps ** -1.5))
+            warmup = max(1, self.warmup_steps)
             
+            if step <= warmup:
+                # Giai đoạn Warmup: Tăng tuyến tính từ 0.0 đến 1.0
+                return step / warmup
+            else:
+                # Giai đoạn Decay: Giảm theo hàm căn bậc hai (Inverse Square Root)
+                # Công thức này giống hệt đường cong Noam, nhưng được chuẩn hóa sao cho tại step = warmup, giá trị trả về = 1.0
+                return (warmup / step) ** 0.5
+                
         self.scheduler = LambdaLR(self.optimizer, lr_lambda)
     
     def load_dataset(self, config) -> DataLoader:
@@ -200,7 +216,7 @@ class BasePretrainingTask:
             self.model.load_state_dict(checkpoint['model_state_dict'])
             self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
             if 'scheduler_state_dict' in checkpoint:
-                self.scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
+                self._temp_scheduler_state = checkpoint['scheduler_state_dict']
             
             # Khôi phục các biến tiến trình
             self.epoch = checkpoint.get('epoch', 0)
@@ -248,6 +264,14 @@ class MLMPretrainingTask(BasePretrainingTask):
         self.total_steps = len(train_dataloader) * num_epochs
         warmup_ratio = 0.1
         self.warmup_steps = max(1, int(self.total_steps * warmup_ratio))
+
+        self._setup_scheduler()
+
+        # NẠP TRẠNG THÁI SCHEDULER NẾU ĐANG RESUME CHECKPOINT
+        if hasattr(self, '_temp_scheduler_state'):
+            self.scheduler.load_state_dict(self._temp_scheduler_state)
+            del self._temp_scheduler_state # Xóa biến tạm cho nhẹ bộ nhớ
+            self.logger.info("Successfully loaded scheduler state from checkpoint.")
         
         self.logger.info(f"Total steps: {self.total_steps}")
         self.logger.info(f"Warmup steps: {self.warmup_steps} (10% of total)")
