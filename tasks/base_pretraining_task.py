@@ -161,42 +161,61 @@ class BasePretrainingTask:
         return total_loss / len(dataloader)
     
     def save_checkpoint(self, tag: str = 'latest'):
-        """Save model checkpoint"""
+        """Lưu checkpoint bao gồm cả trọng số và trạng thái ngẫu nhiên (RNG)"""
         checkpoint_path = self.checkpoint_dir / tag
         checkpoint_path.mkdir(parents=True, exist_ok=True)
         
+        # Tạo dictionary chứa toàn bộ trạng thái hiện tại[cite: 2, 3]
+        checkpoint_data = {
+            'epoch': self.epoch,
+            'global_step': self.global_step,
+            'best_loss': self.best_loss,
+            'model_state_dict': self.model.state_dict(),
+            'optimizer_state_dict': self.optimizer.state_dict(),
+            'scheduler_state_dict': self.scheduler.state_dict(),
+            # ✅ Lưu RNG States để đảm bảo tính tái lập[cite: 2, 4]
+            'torch_rng_state': torch.get_rng_state(),
+            'cuda_rng_state': torch.cuda.get_rng_state() if torch.cuda.is_available() else None,
+            'numpy_rng_state': np.random.get_state(),
+            'random_rng_state': random.getstate(),
+            'config': self.config.to_dict() if hasattr(self.config, 'to_dict') else self.config
+        }
+        
         model_file = checkpoint_path / 'model.pt'
-        optimizer_file = checkpoint_path / 'optimizer.pt'
-        config_file = checkpoint_path / 'config.json'
-        
-        # Save model
-        torch.save(self.model.state_dict(), model_file)
-        self.logger.info(f"Saved model to {model_file}")
-        
-        # Save optimizer
-        torch.save(self.optimizer.state_dict(), optimizer_file)
-        
-        # Save config
-        if hasattr(self.config, 'to_dict'):
-            config_dict = self.config.to_dict()
-        else:
-            config_dict = self.config
-        
-        with open(config_file, 'w') as f:
-            json.dump(config_dict, f, indent=2)
+        torch.save(checkpoint_data, model_file)
+        self.logger.info(f"Saved complete checkpoint (with RNG states) to {model_file}")
     
     def load_checkpoint(self, checkpoint_path: str):
-        """Load from checkpoint"""
+        """Khôi phục trạng thái huấn luyện hoàn chỉnh"""
         if not os.path.exists(checkpoint_path):
             self.logger.warning(f"Checkpoint not found: {checkpoint_path}")
             return
-        
-        self.logger.info(f"Loading checkpoint from {checkpoint_path}")
-        
+            
         model_file = os.path.join(checkpoint_path, 'model.pt')
         if os.path.exists(model_file):
-            self.model.load_state_dict(torch.load(model_file, map_location=self.device))
-            self.logger.info(f"Loaded model from {model_file}")
+            # Nạp dữ liệu checkpoint vào thiết bị hiện tại[cite: 3]
+            checkpoint = torch.load(model_file, map_location=self.device)
+            
+            # Khôi phục trọng số mô hình và optimizer[cite: 3]
+            self.model.load_state_dict(checkpoint['model_state_dict'])
+            self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+            if 'scheduler_state_dict' in checkpoint:
+                self.scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
+            
+            # Khôi phục các biến tiến trình[cite: 3]
+            self.epoch = checkpoint.get('epoch', 0)
+            self.global_step = checkpoint.get('global_step', 0)
+            self.best_loss = checkpoint.get('best_loss', float('inf'))
+            
+            # ✅ Khôi phục RNG States[cite: 2, 4]
+            torch.set_rng_state(checkpoint['torch_rng_state'].cpu())
+            if checkpoint['cuda_rng_state'] is not None and torch.cuda.is_available():
+                torch.cuda.set_rng_state(checkpoint['cuda_rng_state'].cpu())
+            
+            np.random.set_state(checkpoint['numpy_rng_state'])
+            random.setstate(checkpoint['random_rng_state'])
+            
+            self.logger.info(f"Successfully resumed from epoch {self.epoch}, step {self.global_step}")
 
 
 class MLMPretrainingTask(BasePretrainingTask):
