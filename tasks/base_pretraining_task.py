@@ -223,6 +223,7 @@ class MLMPretrainingTask(BasePretrainingTask):
     
     def __init__(self, config):
         super().__init__(config)
+        self.scaler = torch.amp.GradScaler('cuda')
     
     def train(self, num_epochs: Optional[int] = None, train_dataloader: Optional['DataLoader'] = None, val_dataloader: Optional['DataLoader'] = None):
         """Training loop for MLM
@@ -307,12 +308,14 @@ class MLMPretrainingTask(BasePretrainingTask):
 
             self.optimizer.zero_grad()
             
-            _, loss, _ = self.model(input_ids, attention_mask=attention_mask, labels=labels)
+            with torch.amp.autocast('cuda'):
+                _, loss, _ = self.model(input_ids, attention_mask=attention_mask, labels=labels)
             
-            loss.backward()
+            self.scaler.scale(loss).backward()
             
             # Optimizer & Scheduler step
-            self.optimizer.step()
+            self.scaler.step(self.optimizer)
+            self.scaler.update()
             self.scheduler.step()
 
             self.global_step += 1
