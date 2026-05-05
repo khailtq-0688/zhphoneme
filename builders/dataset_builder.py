@@ -47,17 +47,22 @@ class SubsetDataset(Dataset):
         self.total_lines = self._count_total_lines()
         
     def _count_total_lines(self) -> int:
-        """Count total lines across all subset files"""
-        total = 0
-        for filename in sorted(os.listdir(self.corpus_dir)):
-            if filename.startswith('subset_') and filename.endswith('.txt'):
-                filepath = os.path.join(self.corpus_dir, filename)
-                try:
-                    with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
-                        total += sum(1 for line in f if line.strip())
-                except Exception as e:
-                    print(f"Warning: Error reading {filename}: {e}")
-        return total
+        """Đếm tổng dòng tối ưu: (Số file - 1) * 1000 + số dòng file cuối"""
+        files = sorted([f for f in os.listdir(self.corpus_dir) if f.startswith('subset_') and f.endswith('.txt')],
+                    key=lambda x: int(x.split('_')[1].split('.')[0]))
+        
+        if not files:
+            return 0
+        
+        # Giả định các file trước đều đủ lines_per_file (theo logic split của bạn)
+        total = (len(files) - 1) * self.lines_per_file
+        
+        # Chỉ đếm thực tế file cuối cùng
+        last_file = os.path.join(self.corpus_dir, files[-1])
+        with open(last_file, 'r', encoding='utf-8', errors='ignore') as f:
+            last_file_lines = sum(1 for line in f if line.strip())
+            
+        return total + last_file_lines
     
     def __len__(self) -> int:
         return self.total_lines
