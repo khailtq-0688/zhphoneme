@@ -56,7 +56,9 @@ class ScaledDotProductAttention(nn.Module):
         
         if attention_mask is not None:
             attention_mask = attention_mask.unsqueeze(1).unsqueeze(1)
-            att = att.masked_fill(attention_mask == 0, -1e9)
+            # att = att.masked_fill(attention_mask == 0, -1e9)
+            mask_value = torch.finfo(att.dtype).min
+            att = att.masked_fill(attention_mask == 0, mask_value)
         
         att = torch.softmax(att, dim=-1)
 
@@ -111,19 +113,24 @@ class PhrasalLexemeAttention(nn.Module):
         
         phrasal_scores = torch.matmul(query, key.transpose(-2, -1)) / self.d_model  # (bs, head, seq_len, seq_len)
         
-        phrasal_scores = phrasal_scores.masked_fill(attention_mask == 0, -1e9)
+        # phrasal_scores = phrasal_scores.masked_fill(attention_mask == 0, -1e9)
+        mask_value = torch.finfo(phrasal_scores.dtype).min
+        phrasal_scores = phrasal_scores.masked_fill(attention_mask == 0, mask_value)
         phrasal_scores = F.softmax(phrasal_scores, dim=-1)
         
         # Phrasal attention - attending to words
-        phrasal_attn = torch.sqrt(phrasal_scores * phrasal_scores.transpose(-2, -1) + 1e-9)
+        # phrasal_attn = torch.sqrt(phrasal_scores * phrasal_scores.transpose(-2, -1) + 1e-9)
+        phrasal_attn = torch.sqrt(phrasal_scores * phrasal_scores.transpose(-2, -1) + torch.finfo(phrasal_scores.dtype).eps)
         # Co-text module - forming phrasal lexemes
         phrasal_attn = prior_attn + (1 - prior_attn) * phrasal_attn
 
         # Compute P_{ij}
-        p = torch.log(phrasal_attn + 1e-9).masked_fill(after_attention_mask == 0, 0).matmul(summing_operator)
+        # p = torch.log(phrasal_attn + 1e-9).masked_fill(after_attention_mask == 0, 0).matmul(summing_operator)
+        p = torch.log(phrasal_attn + torch.finfo(phrasal_scores.dtype).eps).masked_fill(after_attention_mask == 0, 0).matmul(summing_operator)
         attn = summing_operator.matmul(p).exp().masked_fill((summing_operator.int() - self_attention_mask) == 0, 0)
         
         # Fill upper triangle and apply residual
-        attn = attn + attn.transpose(-2, -1) + phrasal_attn.masked_fill(self_attention_mask == 0, 1e-9)
+        # attn = attn + attn.transpose(-2, -1) + phrasal_attn.masked_fill(self_attention_mask == 0, 1e-9)
+        attn = attn + attn.transpose(-2, -1) + phrasal_attn.masked_fill(self_attention_mask == 0, torch.finfo(phrasal_scores.dtype).eps)
         
         return attn, phrasal_attn
