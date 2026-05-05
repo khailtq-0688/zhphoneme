@@ -95,20 +95,44 @@ class BasePretrainingTask:
         weight_decay = config.get('weight_decay', 0.01)
         betas = config.get('betas', (0.9, 0.98)) # Theo paper ViWordFormer là (0.9, 0.98)
         eps = config.get('eps', 1e-9)
+
+        # =================================================================
+        # LỌC WEIGHT DECAY (WEIGHT DECAY FILTERING)
+        # =================================================================
+        # Nhóm 1: Các tensor >= 2 chiều (Linear weights, Embedding weights) -> Dùng weight decay
+        decay_params = [
+            p for n, p in self.model.named_parameters() 
+            if p.dim() >= 2 and p.requires_grad
+        ]
+        
+        # Nhóm 2: Các tensor 1 chiều (biases, LayerNorm weights/biases) -> KHÔNG dùng weight decay
+        nodecay_params = [
+            p for n, p in self.model.named_parameters() 
+            if p.dim() < 2 and p.requires_grad
+        ]
+        
+        optimizer_grouped_parameters = [
+            {'params': decay_params, 'weight_decay': weight_decay},
+            {'params': nodecay_params, 'weight_decay': 0.0}
+        ]
+
+        # Log để kiểm tra số lượng tham số được chia nhóm
+        self.logger.info(f"Optimizer parameters: {len(decay_params)} tensors with weight decay, "
+                         f"{len(nodecay_params)} tensors without weight decay")
         
         # Lấy d_model từ kiến trúc để tính Noam
         d_model = self.model.d_model 
         
         if optimizer_type == 'adamw':
             self.optimizer = AdamW(
-                self.model.parameters(),
+                optimizer_grouped_parameters,
                 lr=learning_rate,
                 weight_decay=weight_decay,
                 betas=betas,
                 eps=eps
             )
         else:
-            self.optimizer = Adam(self.model.parameters(), lr=learning_rate)
+            self.optimizer = Adam(optimizer_grouped_parameters, lr=learning_rate)
 
         # # Định nghĩa Noam Scheduler theo công thức trong paper
         # def lr_lambda(current_step):
