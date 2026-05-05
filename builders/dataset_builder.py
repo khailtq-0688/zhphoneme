@@ -238,6 +238,16 @@ def build_dataset(config: Dict[str, Any], tokenizer, split: str = 'train'):
     Returns:
         Dataset instance
     """
+
+    mask_id = 4
+
+    # Check nếu là BPE Tokenizer (HuggingFace)
+    if hasattr(tokenizer, 'token_to_id'):
+        mask_id = tokenizer.token_to_id('[MASK]') or 4
+    # Check nếu là Unigram Tokenizer (SentencePiece wrapper)
+    elif hasattr(tokenizer, 'model') and hasattr(tokenizer.model, 'PieceToId'):
+        mask_id = tokenizer.model.PieceToId('<mask>')
+
     dataset_type = config.get('type', 'PretrainingDataset')
     
     if dataset_type == 'SubsetDataset':
@@ -247,7 +257,8 @@ def build_dataset(config: Dict[str, Any], tokenizer, split: str = 'train'):
             tokenizer=tokenizer,
             max_seq_len=config.get('max_seq_len', 512),
             mlm_probability=config.get('mlm_probability', 0.15),
-            lines_per_file=config.get('lines_per_file', 1000)
+            lines_per_file=config.get('lines_per_file', 1000),
+            mask_id=mask_id
         )
     elif dataset_type == 'PretrainingDataset':
         # For merged corpus file format
@@ -255,7 +266,8 @@ def build_dataset(config: Dict[str, Any], tokenizer, split: str = 'train'):
             file_path=config.get('file_path', './processed_data/merged_corpus.txt'),
             tokenizer=tokenizer,
             max_seq_len=config.get('max_seq_len', 512),
-            mlm_probability=config.get('mlm_probability', 0.15)
+            mlm_probability=config.get('mlm_probability', 0.15),
+            mask_id=mask_id
         )
     else:
         raise ValueError(f"Unknown dataset type: {dataset_type}")
