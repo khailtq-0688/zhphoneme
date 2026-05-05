@@ -44,6 +44,8 @@ training:
   batch_size: 60
   num_epochs: 100
   num_workers: 4
+  device: cuda
+  patience: 5
   
   # Checkpoint settings
   save_steps: 1000

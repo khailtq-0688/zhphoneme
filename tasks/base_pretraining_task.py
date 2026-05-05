@@ -235,33 +235,44 @@ class MLMPretrainingTask(BasePretrainingTask):
         self.logger.info(f"Learning rate: {self.config.get('learning_rate', 5e-5)}")
         self.logger.info(f"Scheduler: LambdaLR with linear warmup and decay")
         
+        # Khởi tạo các tham số Early Stopping
+        best_val_loss = float('inf')
+        patience_counter = 0
+        max_patience = self.config.training.get('patience', 5) # Lấy từ config
         for epoch in range(num_epochs):
             self.epoch = epoch
             self.logger.info(f"Epoch {epoch + 1}/{num_epochs}")
             
-            # 1. Huấn luyện (Học)
+            # Huấn luyện một epoch
             train_loss = self._train_epoch(train_dataloader)
-            self.logger.info(f"Epoch {epoch + 1} - Average Train Loss: {train_loss:.4f}")
-            
-            # 2. Lưu lại checkpoint kết quả của epoch này
-            self.save_checkpoint(tag=f'epoch_{epoch + 1}')
-            
-            # 3. Đánh giá (Thi thử) và lưu Best Model
+            self.logger.info(f"Epoch {epoch + 1} - Train Loss: {train_loss:.4f}")
+
+            # Đánh giá trên tập Validation (Nếu có)
             if val_dataloader is not None:
-                eval_loss = self.evaluate(val_dataloader)
-                self.logger.info(f"Epoch {epoch + 1} - Average Eval Loss: {eval_loss:.4f}")
-                
-                # So sánh dựa trên điểm thi thử (eval_loss), không dùng train_loss
-                if eval_loss < self.best_loss:
-                    self.best_loss = eval_loss
-                    self.save_checkpoint(tag='best')
-                    self.logger.info(f"✓ Best validation loss improved to {self.best_loss:.4f}")
+                val_loss = self.evaluate(val_dataloader)
+                self.logger.info(f"Epoch {epoch + 1} - Val Loss: {val_loss:.4f}")
+
+                # LOGIC EARLY STOPPING
+                if val_loss < best_val_loss:
+                    best_val_loss = val_loss
+                    patience_counter = 0 # Reset đếm nếu có cải thiện
+                    self.save_checkpoint(tag='best') # Lưu model tốt nhất
+                    self.logger.info(f"  --> Best model saved with Val Loss: {best_val_loss:.4f}")
+                else:
+                    patience_counter += 1
+                    self.logger.info(f"  --> No improvement for {patience_counter} epochs.")
+
+                # Kiểm tra nếu đạt ngưỡng ngắt sớm
+                if patience_counter >= max_patience:
+                    self.logger.info("="*30)
+                    self.logger.info(f"EARLY STOPPING TRIGGERED tại epoch {epoch + 1}")
+                    self.logger.info("="*30)
+                    break 
             else:
-                self.logger.info("Skipping validation as no val_dataloader was provided.")
-        
-        self.logger.info("\n" + "="*60)
+                # Nếu không có val_set, lưu theo từng epoch như cũ
+                self.save_checkpoint(tag=f'epoch_{epoch + 1}')
+
         self.logger.info("Training complete!")
-        self.logger.info("="*60)
     
     def _train_epoch(self, dataloader: DataLoader) -> float:
         self.model.train()
