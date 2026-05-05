@@ -89,12 +89,15 @@ class BasePretrainingTask:
         return tokenizer
     
     def _setup_optimizer(self, config):
-        """Setup optimizer and learning rate scheduler"""
+        """Setup optimizer and Noam Learning Rate Scheduler"""
         optimizer_type = config.get('optimizer', 'adamw').lower()
-        learning_rate = config.get('learning_rate', 5e-5)
+        learning_rate = config.get('learning_rate', 1.0) # Với Noam, LR gốc thường để 1.0 vì công thức đã tự scale
         weight_decay = config.get('weight_decay', 0.01)
-        betas = config.get('betas', (0.9, 0.999))
-        eps = config.get('eps', 1e-6)
+        betas = config.get('betas', (0.9, 0.98)) # Theo paper ViWordFormer là (0.9, 0.98)
+        eps = config.get('eps', 1e-9)
+        
+        # Lấy d_model từ kiến trúc để tính Noam
+        d_model = self.model.d_model 
         
         if optimizer_type == 'adamw':
             self.optimizer = AdamW(
@@ -105,24 +108,14 @@ class BasePretrainingTask:
                 eps=eps
             )
         else:
-            self.optimizer = Adam(
-                self.model.parameters(),
-                lr=learning_rate
-            )
-        
-        # Setup scheduler with warmup + linear decay
-        # Will be properly calculated in training loop with actual total_steps
-        self.total_steps = 1000000  # Placeholder, will be updated
-        self.warmup_steps = None  # Will be calculated as 5% of total_steps
-        
+            self.optimizer = Adam(self.model.parameters(), lr=learning_rate)
+
+        # Định nghĩa Noam Scheduler theo công thức trong paper
         def lr_lambda(current_step):
-            """Learning rate schedule with warmup (5% of total) and linear decay"""
-            if self.warmup_steps is None:
-                return 1.0  # No warmup yet
-            if current_step < self.warmup_steps:
-                return float(current_step) / float(max(1, self.warmup_steps))
-            return max(0.0, float(self.total_steps - current_step) / float(max(1, self.total_steps - self.warmup_steps)))
-        
+            step = current_step + 1
+            # Công thức: (d_model^-0.5) * min(step^-0.5, step * warmup^-1.5)
+            return (d_model ** -0.5) * min(step ** -0.5, step * (self.warmup_steps ** -1.5))
+            
         self.scheduler = LambdaLR(self.optimizer, lr_lambda)
     
     def load_dataset(self, config) -> DataLoader:
@@ -233,7 +226,8 @@ class MLMPretrainingTask(BasePretrainingTask):
         
         # Calculate and set actual total steps for scheduler
         self.total_steps = len(train_dataloader) * num_epochs
-        self.warmup_steps = int(self.total_steps * 0.10)  # 10% of total steps
+        warmup_ratio = 0.1
+        self.warmup_steps = max(1, int(self.total_steps * warmup_ratio))
         
         self.logger.info(f"Total steps: {self.total_steps}")
         self.logger.info(f"Warmup steps: {self.warmup_steps} (10% of total)")
