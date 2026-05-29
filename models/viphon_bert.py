@@ -5,7 +5,7 @@ from transformers.models.bert import BertModel
 
 from configs.viphon_bert_config import ViPhonBertConfig
 
-class PinyinBert(PreTrainedModel):
+class ViPhonBert(PreTrainedModel):
     def __init__(self, config: ViPhonBertConfig):
         super().__init__(config)
         self.config = config

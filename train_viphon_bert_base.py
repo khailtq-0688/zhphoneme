@@ -2,22 +2,22 @@ import torch
 from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import LambdaLR
 
-from configs.pinyin_bert_config import PinyinBertConfig
+from configs.viphon_bert_config import ViPhonBertConfig
 from vocabs.viphon_tokenizer import ViPhonTokenizer
-from data_utils.pinyin_dataset import PinyinDataset
-from models.pinyin_bert import PinyinBert
+from data_utils.viphon_dataset import ViPhonDataset
+from models.viphon_bert import ViPhonBert
 from data_utils.pinyin_dataset import collate_fn
 
 from tqdm import tqdm
 import os
 
 BS = 64
-CHECKPOINT = "pinyin_bert_weights"
-MODEL_NAME = "pinyin_bert_base"
+CHECKPOINT = "viphon_bert_weights"
+MODEL_NAME = "viphon_bert_base"
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
-config = PinyinBertConfig(
+config = ViPhonBertConfig(
     hidden_size=768,
     num_hidden_layers=12,
     num_attention_heads=12,
@@ -26,13 +26,13 @@ config = PinyinBertConfig(
     hidden_dropout_prob=0.1,
     attention_probs_dropout_prob=0.1,
     max_position_embeddings=512,
-    max_length=512, # config for baidubaike pretrained corpus
+    max_length=1024, # config for baidubaike pretrained corpus
     type_vocab_size=1,
     is_decoder=False,
     add_cross_attention = False
 )
-tokenizer = PinyinTokenizer(config)
-dataset = PinyinDataset(
+tokenizer = ViPhonTokenizer(config)
+dataset = ViPhonDataset(
     tokenizer=tokenizer, 
     corpus_dir="data/baidubaike_chinese", 
     max_length=config.max_length
@@ -44,7 +44,7 @@ dataloader = DataLoader(
     num_workers=24,
     collate_fn=collate_fn
 )
-model = PinyinBert(config).to(device)
+model = ViPhonBert(config).to(device)
 model.train()
 optimizer = torch.optim.AdamW(model.parameters(), lr=5e-5, weight_decay=0.01, betas=(0.9, 0.999), eps=1e-6)
 
