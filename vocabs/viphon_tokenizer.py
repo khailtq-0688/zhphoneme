@@ -67,12 +67,11 @@ class ViPhonTokenizer:
             "|", "\\", ":", ";", "<", ">", "/",
             "?", ".", ",", "_", "。", "·"
         ]
-        for special_token in special_tokens:
-            pattern = re.compile(f"{special_token}")
-            replace = f" {special_token} "
-            text = re.sub(pattern, replace)
-
-        text = " ".join(text.strip().split()) # remove duplicated spaces
+        pattern = "(" + "|".join(re.escape(t) for t in special_tokens) + ")"
+        # Insert spaces around matched tokens
+        text = re.sub(pattern, r" \1 ", text)
+        # Normalize multiple spaces
+        text = re.sub(r"\s+", " ", text).strip()
         
         return text
 
@@ -85,11 +84,14 @@ class ViPhonTokenizer:
             components = self.analyze(word)
             if components:
                 initial, rhyme, tone = components
-                syllables.append((
-                    self.config.label2id[initial] if initial else self.config.empty_token_id,
-                    self.config.label2id[rhyme],
-                    self.config.label2id[tone] if tone else self.config.empty_token_id 
-                ))
+                if rhyme in self.config.label2id:
+                    syllables.append((
+                        self.config.label2id[initial] if initial else self.config.empty_token_id,
+                        self.config.label2id[rhyme],
+                        self.config.label2id[tone] if tone else self.config.empty_token_id 
+                    ))
+                else:
+                    syllables.append((self.config.unk_token_id, ) * 3)
             else:
                 for char in word:
                     syllables.append(
