@@ -97,19 +97,15 @@ class PinyinTokenizer:
                     syllables.append(
                         (self.config.label2id[char], ) * 3 if char in self.config.label2id else (self.config.unk_token_id, ) * 3
                     )
-
-        vec = torch.tensor(syllables).long()
+        
         # truncate the input
-        vec = vec[:self.config.max_length]
+        syllables = syllables[:self.config.max_length-1]
+        syllables.append((self.config.sep_token_id, ) * 3)
+        vec = torch.tensor(syllables).long()
 
         return vec
     
     def __call__(self, sentence: str) -> PinyinEncodedTokens:
-        sentence_ids = self.encode(sentence)
-        input_ids, labels = self.create_labels(sentence_ids)
-        # attention_mask = self.create_attention_mask(input_ids)
-        return PinyinEncodedTokens(
-            input_ids = sentence_ids,
-            # attention_mask = attention_mask,
-            labels = labels
-        )
+        input_ids = self.encode(sentence)
+        input_ids, labels = self.create_labels(input_ids)
+        return input_ids, labels

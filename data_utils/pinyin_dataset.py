@@ -1,3 +1,4 @@
+import torch
 from torch.utils.data import Dataset
 from torch.nn.utils.rnn import pad_sequence
 
@@ -5,6 +6,9 @@ from vocabs.pinyin_tokenizer import PinyinTokenizer
 from vocabs.pinyin_tokenizer import PinyinEncodedTokens
 
 import os
+import numpy as np
+import random
+from tqdm import tqdm
 
 PAD_TOKEN_ID = -100
 
@@ -41,22 +45,37 @@ class PinyinDataset(Dataset):
         self.corpus_dir = corpus_dir
         self.tokenizer = tokenizer
         self.txt_files = os.listdir(corpus_dir)
-        self.total_line = 0
-        for txt_file in self.txt_files:
+        self.corpus = []
+        for txt_file in tqdm(self.txt_files, desc="Loading data"):
             texts = open(os.path.join(corpus_dir, txt_file)).readlines()
-            self.total_line += len(texts)
-
-        self.LINE_PER_FILE = 1_000
+            self.corpus.extend(texts)
 
     def __len__(self):
-        return self.total_line
+        return len(self.corpus)
 
     def __getitem__(self, idx):
-        # the default format for the corpus file of each line if subset_<idx>.txt
-        subset_idx, line_idx = divmod(idx+1, self.LINE_PER_FILE)
-        with open(os.path.join(self.corpus_dir, f"subset_{subset_idx}.txt")) as file:
-            texts = file.readlines()
+        text = self.corpus[idx]
+        input_ids, labels = self.tokenizer(self.corpus[idx])
+        total_sampling = 5
         
-        encoded_text = self.tokenizer(texts[line_idx-1])
+        for i in range(total_sampling):
+            # whether or not we construct the input having more than two sentences
+            if np.random.binomial(1, 0.5) == 0:
+                continue
+            
+            random_text = random.choice(self.corpus)
+            random_input_ids, random_labels = self.tokenizer(random_text)
 
-        return encoded_text
+            # ignore the <cls> token
+            input_ids = torch.cat([input_ids, random_input_ids[1:]], dim=0)
+            labels = torch.cat([labels, random_labels[1:]], dim=0)
+            
+            if input_ids.shape[0] > self.max_length:
+                input_ids = input_ids[:self.max_length]
+                labels = labels[:self.max_length]
+                break
+
+        return PinyinEncodedTokens(
+            input_ids = input_ids,
+            labels = labels
+        )

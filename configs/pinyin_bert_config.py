@@ -42,19 +42,21 @@ class PinyinBertConfig(PretrainedConfig):
 
         self.pad_token = "<pad>"
         self.cls_token = "<cls>"
+        self.sep_token = "<sep>"
         self.empty_token = "<empty>"
         self.mask_token = "<mask>"
         self.unk_token = "<unk>"
 
-        self.specials = [self.pad_token, self.cls_token, self.empty_token, self.mask_token, self.unk_token]
+        self.specials = [self.pad_token, self.cls_token, self.sep_token, self.empty_token, self.mask_token, self.unk_token]
 
         self.pad_token_id = 0
         self.cls_token_id = 1
-        self.empty_token_id = 2
-        self.mask_token_id = 3
-        self.unk_token_id = 4
+        self.sep_token_id = 2
+        self.empty_token_id = 3
+        self.mask_token_id = 4
+        self.unk_token_id = 5
 
-        self.special_ids = [self.pad_token_id, self.cls_token_id, self.empty_token_id, self.mask_token_id, self.unk_token_id]
+        self.special_ids = [self.pad_token_id, self.cls_token_id, self.sep_token_id, self.empty_token_id, self.mask_token_id, self.unk_token_id]
 
         self.initials = [
             "tɕ", "m", "p", "tʰ", "t", "s", "ts", "k", "ɕ", "ʈʂʰ", "kʰ", "l",
