@@ -1,0 +1,17 @@
+*.pyc
+example*
+*.json
+data
+checkpoints
+a_temp
+.old
+scripts/
+
+*checkpoints/
+.pre-commit-config.yaml
+*examine*
+*.zh
+*.vi
+*.txt
+analyze*
+datasets
