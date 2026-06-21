@@ -49,7 +49,7 @@ class PinyinTokenizer:
             token_id = input_ids[idx+1, 0]
             if token_id in self.config.special_ids:
                 continue
-            if random.random() <= 0.3:
+            if random.random() <= 0.15:
                     labels[idx+1, :] = input_ids[idx+1, :]
                     input_ids[idx+1, :] = self.config.mask_token_id
 

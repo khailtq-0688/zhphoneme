@@ -1,6 +1,4 @@
 import torch
-import numpy as np
-import random
 from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import LambdaLR
 
@@ -13,26 +11,13 @@ from data_utils.pinyin_dataset import collate_fn
 from tqdm import tqdm
 import os
 
-def set_seed(seed=42):
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
-    os.environ['PYTHONHASHSEED'] = str(seed)
-
-# Kích hoạt cố định seed tuyệt đối đầu chương trình
-set_seed(42)
-
-BS = 64
-CHECKPOINT = "pinyin_bert_weights"
+BS = 256
+CHECKPOINT = "/network-volume/pinyin-bert-base"
 MODEL_NAME = "pinyin_bert_base"
 
-# Đổi thành True nếu muốn khôi phục trạng thái và chạy tiếp từ checkpoint bị ngắt quãng
-RESUME_FROM_CHECKPOINT = True
-
 device = "cuda" if torch.cuda.is_available() else "cpu"
+
+RESUME_FROM_CHECKPOINT = True
 
 config = PinyinBertConfig(
     hidden_size=768,
@@ -51,30 +36,25 @@ config = PinyinBertConfig(
 tokenizer = PinyinTokenizer(config)
 dataset = PinyinDataset(
     tokenizer=tokenizer, 
-    corpus_dir="data/baidubaike_chinese", 
+    corpus_dir="/network-volume/data/baidubaike_chinese",
     max_length=config.max_length
 )
-
-# Khởi tạo Generator riêng cho DataLoader để đảm bảo tính nhất quán dữ liệu qua các lần xáo trộn
-g = torch.Generator()
-g.manual_seed(42)
 
 dataloader = DataLoader(
     dataset=dataset,
     batch_size=BS,
     shuffle=True,
     num_workers=24,
-    collate_fn=collate_fn,
-    worker_init_fn=lambda worker_id: np.random.seed(42 + worker_id), # Thiết lập seed độc lập cho từng worker
-    generator=g,
-    pin_memory=True
+    collate_fn=collate_fn
 )
-
 model = PinyinBert(config).to(device)
-optimizer = torch.optim.AdamW(model.parameters(), lr=5e-5, weight_decay=0.01, betas=(0.9, 0.999), eps=1e-6)
+model.train()
+optimizer = torch.optim.AdamW(model.parameters(), lr=2e-5, weight_decay=0.01, betas=(0.9, 0.999), eps=1e-6)
 
 total_steps = 1_000_000
-warmup_steps = int(total_steps * 0.10)
+warmup_steps = int(total_steps * 0.01)
+
+print(f"Total steps: {total_steps}")
 
 def lr_lambda(current_step):
     if current_step < warmup_steps:
@@ -88,9 +68,8 @@ start_epoch = 1
 global_step = 0
 checkpoint_path = os.path.join(CHECKPOINT, f"{MODEL_NAME}_training.pth")
 
-# Cơ chế khôi phục trạng thái huấn luyện (Resume) từ checkpoint
 if RESUME_FROM_CHECKPOINT and os.path.isfile(checkpoint_path):
-    print(f"=> Tìm thấy checkpoint. Đang tiến hành khôi phục từ: {checkpoint_path}")
+    print(f"=> Tìm thấy checkpoint. Đang khôi phục từ: {checkpoint_path}")
     checkpoint = torch.load(checkpoint_path, map_location=device)
     
     start_epoch = checkpoint["epoch"]
@@ -100,21 +79,18 @@ if RESUME_FROM_CHECKPOINT and os.path.isfile(checkpoint_path):
     lr_scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
     scaler.load_state_dict(checkpoint["scaler_state_dict"])
     
-    # Cập nhật mốc bước chạy cuối cùng cho scheduler tránh bị nhảy vọt LR
     lr_scheduler.last_epoch = global_step
-    print(f"=> Khôi phục thành công! Tiếp tục huấn luyện tại Epoch {start_epoch}, Step tổng: {global_step}")
+    print(f"=> Khôi phục thành công! Tiếp tục train từ Epoch {start_epoch}, Step tổng {global_step}")
 else:
-    print(f"=> Không kích hoạt resume hoặc không tìm thấy file checkpoint. Khởi chạy tiền huấn luyện mới từ đầu.")
+    print(f"=> Không kích hoạt resume hoặc không tìm thấy file. Bắt đầu pre-train mới từ đầu.")
 
-print(f"Total steps mục tiêu: {total_steps} | Khởi động thực tế tại Step: {global_step}")
+print(f"Total steps: {total_steps} | Khởi động tại Step: {global_step}")
 
 if not os.path.isdir(CHECKPOINT):
     os.makedirs(CHECKPOINT, exist_ok=True)
 
 model.train()
 done = False
-
-# Vòng lặp Step-based vô hạn sử dụng while True đồng bộ theo cấu trúc ViPhonBERT
 while True:
     total_loss = 0
     progress_bar = tqdm(dataloader, desc=f"Epoch {start_epoch}")
@@ -126,7 +102,6 @@ while True:
 
         optimizer.zero_grad()
         
-        # Huấn luyện độ chính xác hỗn hợp AMP tự động
         with torch.amp.autocast('cuda'):
             outputs = model(input_ids, attention_mask=attention_mask, labels=labels)
             loss = outputs['loss'] 
@@ -145,16 +120,13 @@ while True:
         })
         
         global_step += 1
-        
-        # Kiểm tra điều kiện dừng ngắt vòng lặp khi chạm ngưỡng steps mục tiêu
-        if global_step >= total_steps:
+        if global_step > total_steps:
             done = True
             break
             
-        # Cơ chế lưu checkpoint định kỳ sau mỗi 1000 steps huấn luyện
         if global_step % 1000 == 0:
             torch.save({
-                "epoch": start_epoch + 1,  
+                "epoch": start_epoch,  
                 "global_step": global_step,
                 "model_state_dict": model.state_dict(),
                 "optimizer_state_dict": optimizer.state_dict(),
@@ -162,7 +134,6 @@ while True:
                 "scaler_state_dict": scaler.state_dict()
             }, checkpoint_path)
 
-    # Lưu trọng số mô hình dạng chuẩn .save_pretrained định kỳ cuối mỗi epoch
     model.save_pretrained(os.path.join(CHECKPOINT, f"{MODEL_NAME}"))
 
     avg_loss = total_loss / len(dataloader)
@@ -170,5 +141,5 @@ while True:
     
     if done:
         break
-        
+    
     start_epoch += 1

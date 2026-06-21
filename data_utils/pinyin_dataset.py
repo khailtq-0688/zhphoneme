@@ -54,17 +54,15 @@ class PinyinDataset(Dataset):
         return len(self.corpus)
 
     def __getitem__(self, idx):
-        text = self.corpus[idx]
         input_ids, labels = self.tokenizer(self.corpus[idx])
         total_sampling = 5
         
         for i in range(total_sampling):
             # whether or not we construct the input having more than two sentences
-            if np.random.binomial(1, 0.5) == 0:
+            if np.random.binomial(1, 0.5) == 1:
                 continue
             
-            random_text = random.choice(self.corpus)
-            random_input_ids, random_labels = self.tokenizer(random_text)
+            random_input_ids, random_labels = self.tokenizer(random.choice(self.corpus))
 
             # ignore the <cls> token
             input_ids = torch.cat([input_ids, random_input_ids[1:]], dim=0)
