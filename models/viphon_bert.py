@@ -6,6 +6,13 @@ from transformers.models.bert import BertModel
 from configs.viphon_bert_config import ViPhonBertConfig
 
 class ViPhonBert(PreTrainedModel):
+    config_class = ViPhonBertConfig
+    _tied_weights_keys = {}
+    
+    @property
+    def all_tied_weights_keys(self):
+        return self._tied_weights_keys
+    
     def __init__(self, config: ViPhonBertConfig):
         super().__init__(config)
         self.config = config

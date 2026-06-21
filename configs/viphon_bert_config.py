@@ -42,21 +42,23 @@ class ViPhonBertConfig(PretrainedConfig):
 
         self.pad_token = "<pad>"
         self.cls_token = "<cls>"
+        self.sep_token = "<sep>"
         self.empty_token = "<empty>"
         self.mask_token = "<mask>"
         self.unk_token = "<unk>"
 
-        self.specials = [self.pad_token, self.cls_token, self.empty_token, self.mask_token, self.unk_token]
+        self.specials = [self.pad_token, self.cls_token, self.sep_token, self.empty_token, self.mask_token, self.unk_token]
 
         self.pad_token_id = 0
         self.cls_token_id = 1
-        self.empty_token_id = 2
-        self.mask_token_id = 3
-        self.unk_token_id = 4
+        self.sep_token_id = 2
+        self.empty_token_id = 3
+        self.mask_token_id = 4
+        self.unk_token_id = 5
 
-        self.special_ids = [self.pad_token_id, self.cls_token_id, self.empty_token_id, self.mask_token_id, self.unk_token_id]
+        self.special_ids = [self.pad_token_id, self.cls_token_id, self.sep_token_id, self.empty_token_id, self.mask_token_id, self.unk_token_id]
 
-        self.initials = ["m", "b", "k", "v", "t", "ʝ", "d", "n", "r", "s", "ʂ", "l", "h", "f", "tʰ", "ɣ", "z", "tɕ", "ʈʂ", "ɲ", "χ", "w", "f", "z", "j", "p", "ŋ"]
+        self.initials = ["m", "b", "k", "v", "t", "ʝ", "d", "n", "r", "s", "ʂ", "l", "h", "f", "tʰ", "ɣ", "z", "tɕ", "ʈʂ", "ɲ", "χ", "w", "j", "p", "ŋ"]
         self.rhymes = ["ə̆p", "wet", "wɛw", "uəm", "ɔt", "ɛp", "ɯm", "in", "it", "et", "i", "uəj", "ɯ", "wăj", "wə̆t", "wăn", "ə̆ŋ", "aj", "ə̆m", "uj", 
                        "ɔːŋ", "ɔj", "iət", "ə̆w", "ăk", "iə", "ik̟", "wik̟", "up", "ak̟", "om", "ɛt", "iək", "um", "win", "wiət", "ɛŋ", "ut", "ɯŋ", 
                        "uət", "wam", "uk", "an", "ɯt", "uə", "ɯəp", "ə", "ɯj", "wăt", "ɛn", "ɔ", "aŋ̟", "un", "iŋ̟", "em", "uəŋ", "wek̟", "oŋ", "wɛt", 

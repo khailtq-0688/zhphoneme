@@ -100,16 +100,12 @@ class ViPhonTokenizer:
 
         vec = torch.tensor(syllables).long()
         # truncate the input
-        vec = vec[:self.config.max_length]
+        syllables = syllables[:self.config.max_length-1]
+        syllables.append((self.config.sep_token_id, ) * 3)
+        vec = torch.tensor(syllables).long()
 
         return vec
     
     def __call__(self, sentence: str) -> VietnameseEncodedTokens:
-        sentence_ids = self.encode(sentence)
-        _, labels = self.create_labels(sentence_ids)
-        return VietnameseEncodedTokens(
-            input_ids = sentence_ids,
-            labels = labels
-        )
-
-
+        input_ids = self.encode(sentence)
+        return self.create_labels(input_ids)

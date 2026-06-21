@@ -1,7 +1,12 @@
+import torch
 from torch.utils.data import Dataset
 from torch.nn.utils.rnn import pad_sequence
 
 from vocabs.viphon_tokenizer import ViPhonTokenizer, VietnameseEncodedTokens
+
+from tqdm import tqdm
+import random
+import numpy as np
 
 import os
 
@@ -35,13 +40,13 @@ def collate_fn(samples: list[VietnameseEncodedTokens]):
     )
 
 class ViPhonDataset(Dataset):
-    def __init__(self, tokenizer: ViPhonTokenizer, corpus_dir, max_length=256):
+    def __init__(self, tokenizer: ViPhonTokenizer, corpus_dir, max_length=512):
         self.max_length = max_length
         self.corpus_dir = corpus_dir
         self.tokenizer = tokenizer
         self.txt_files = os.listdir(corpus_dir)
-        self.total_line = 0
-        for txt_file in self.txt_files:
+        # self.total_line = 205_718_386
+        for txt_file in tqdm(self.txt_files, desc="Loading corpus"):
             texts = open(os.path.join(corpus_dir, txt_file)).readlines()
             self.total_line += len(texts)
 
@@ -51,12 +56,32 @@ class ViPhonDataset(Dataset):
         return self.total_line
 
     def __getitem__(self, idx):
-        # the default format for the corpus file of each line if subset_<idx>.txt
         subset_idx, line_idx = divmod(idx+1, self.LINE_PER_FILE)
         with open(os.path.join(self.corpus_dir, f"subset_{subset_idx}.txt")) as file:
-            for line_ith, text in enumerate(file):
-                if line_ith == line_idx - 1:
-                    encoded_text = self.tokenizer(text)
-                    break
+            subset = file.readlines()
+        sentence = subset[line_idx-1]
+        input_ids, labels = self.tokenizer(sentence)
+        total_sampling = 5
+                
+        for i in range(total_sampling):
+            # whether or not we construct the input having more than two sentences
+            if np.random.binomial(1, 0.5) == 1:
+                continue
 
-        return encoded_text
+            random_idx = random.choice(range(self.LINE_PER_FILE))
+            random_sentence = subset[random_idx-1]
+            random_input_ids, random_labels = self.tokenizer(random_sentence)
+
+            # ignore the <cls> token
+            input_ids = torch.cat([input_ids, random_input_ids[1:]], dim=0)
+            labels = torch.cat([labels, random_labels[1:]], dim=0)
+
+            if input_ids.shape[0] > self.max_length:
+                input_ids = input_ids[:self.max_length]
+                labels = labels[:self.max_length]
+                break
+
+        return VietnameseEncodedTokens(
+            input_ids = input_ids,
+            labels = labels
+        )
