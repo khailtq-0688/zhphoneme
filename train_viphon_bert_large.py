@@ -71,7 +71,7 @@ dataloader = DataLoader(
 model = ViPhonBert(config).to(device)
 optimizer = torch.optim.AdamW(model.parameters(), lr=5e-5, weight_decay=0.01, betas=(0.9, 0.999), eps=1e-6)
 
-total_steps = 3_000_000
+total_steps = 1_000_000
 warmup_steps = int(total_steps * 0.01)
 
 def lr_lambda(current_step):
