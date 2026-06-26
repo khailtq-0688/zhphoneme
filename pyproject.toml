@@ -1,0 +1,15 @@
+[project]
+name = "zhphoneme"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "hanzipy>=1.0.4",
+    "pinyin-to-ipa>=1.0.0",
+    "pypinyin>=0.55.0",
+    "torch==2.4.1",
+    "tqdm>=4.68.3",
+    "transformers==4.45.0",
+    "wandb>=0.28.0",
+]

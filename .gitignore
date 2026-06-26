@@ -15,3 +15,5 @@ scripts/
 analyze*
 
 *.log
+
+*__pycache__/

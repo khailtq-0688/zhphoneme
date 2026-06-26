@@ -45,7 +45,7 @@ class ViPhonDataset(Dataset):
         self.corpus_dir = corpus_dir
         self.tokenizer = tokenizer
         self.txt_files = os.listdir(corpus_dir)
-        # self.total_line = 205_718_386
+        self.total_line = 0
         for txt_file in tqdm(self.txt_files, desc="Loading corpus"):
             texts = open(os.path.join(corpus_dir, txt_file)).readlines()
             self.total_line += len(texts)
@@ -56,10 +56,10 @@ class ViPhonDataset(Dataset):
         return self.total_line
 
     def __getitem__(self, idx):
-        subset_idx, line_idx = divmod(idx+1, self.LINE_PER_FILE)
+        subset_idx, line_idx = divmod(idx, self.LINE_PER_FILE)
         with open(os.path.join(self.corpus_dir, f"subset_{subset_idx}.txt")) as file:
             subset = file.readlines()
-        sentence = subset[line_idx-1]
+        sentence = subset[line_idx]
         input_ids, labels = self.tokenizer(sentence)
         total_sampling = 5
                 
@@ -68,8 +68,7 @@ class ViPhonDataset(Dataset):
             if np.random.binomial(1, 0.5) == 1:
                 continue
 
-            random_idx = random.choice(range(self.LINE_PER_FILE))
-            random_sentence = subset[random_idx-1]
+            random_sentence = random.choice(subset)
             random_input_ids, random_labels = self.tokenizer(random_sentence)
 
             # ignore the <cls> token
