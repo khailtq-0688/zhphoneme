@@ -4,3 +4,4 @@ pypinyin
 pinyin_to_ipa
 tqdm
 transformers==4.45.0
+wandb

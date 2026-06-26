@@ -18,6 +18,7 @@ from data_utils.viphon_dataset import collate_fn
 from tqdm import tqdm
 import os
 import argparse
+import wandb
 
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True
@@ -53,6 +54,7 @@ dist.init_process_group(backend="nccl")
 local_rank = int(os.environ["LOCAL_RANK"])
 torch.cuda.set_device(local_rank)
 device = torch.device("cuda", local_rank)
+rank = dist.get_rank()
 
 config = ViPhonBertConfig(
     hidden_size=768,
@@ -103,12 +105,29 @@ model = DDP(
 )
 optimizer = torch.optim.AdamW(model.parameters(), lr=5e-5, weight_decay=0.01, betas=(0.9, 0.98), eps=1e-6)
 
-total_steps = 1_000_000
+total_steps = 3_000_000
 warmup_steps = int(total_steps * 0.01)
+
+if rank == 0:
+    wandb.init(
+        project="ViPhonBERT",
+        name=MODEL_NAME,
+        config={
+            "batch_size": BS,
+            "lr": 5e-5,
+            "hidden_size": config.hidden_size,
+            "layers": config.num_hidden_layers,
+            "heads": config.num_attention_heads,
+            "max_length": config.max_length,
+            "warmup_steps": warmup_steps,
+            "total_steps": total_steps,
+        }
+    )
+    wandb.config.update(vars(config))
 
 def lr_lambda(current_step):
     if current_step < warmup_steps:
-        return float(current_step) / float(max(1, warmup_steps)) 
+        return float(current_step) / float(max(1, warmup_steps))
     return max(0.0, float(total_steps - current_step) / float(max(1, total_steps - warmup_steps)))
     
 lr_scheduler = LambdaLR(optimizer, lr_lambda)
@@ -143,7 +162,6 @@ if not os.path.isdir(CHECKPOINT):
 
 model.train()
 done = False
-rank = dist.get_rank()
 while True:
     total_loss = 0
     sampler.set_epoch(start_epoch)
@@ -198,6 +216,15 @@ while True:
             'step': global_step,
             'lr': f"{lr_scheduler.get_last_lr()[0]:.2e}"
         })
+
+        if rank == 0:
+            wandb.log(
+                {
+                    "train/loss": loss.item(),
+                    "train/lr": lr_scheduler.get_last_lr()[0],
+                },
+                step=global_step
+            )
         
         if global_step > total_steps:
             done = True
