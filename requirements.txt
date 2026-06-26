@@ -1,0 +1,6 @@
+torch==2.4.1
+hanzipy
+pypinyin
+pinyin_to_ipa
+tqdm
+transformers==4.45.0
