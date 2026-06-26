@@ -9,8 +9,16 @@ import random
 import numpy as np
 
 import os
+from bisect import bisect_right
 
 PAD_TOKEN_ID = -100
+
+def _subset_sort_key(path):
+    stem, _ = os.path.splitext(path)
+    prefix, _, suffix = stem.rpartition("_")
+    if prefix == "subset" and suffix.isdigit():
+        return (0, int(suffix))
+    return (1, path)
 
 def collate_fn(samples: list[VietnameseEncodedTokens]):
     # Extract tensors
@@ -44,20 +52,27 @@ class ViPhonDataset(Dataset):
         self.max_length = max_length
         self.corpus_dir = corpus_dir
         self.tokenizer = tokenizer
-        self.txt_files = os.listdir(corpus_dir)
+        txt_files = sorted(os.listdir(corpus_dir), key=_subset_sort_key)
+        self.txt_files = []
         self.total_line = 0
-        for txt_file in tqdm(self.txt_files, desc="Loading corpus"):
-            texts = open(os.path.join(corpus_dir, txt_file)).readlines()
+        self.cumulative_lines = []
+        for txt_file in tqdm(txt_files, desc="Loading corpus"):
+            with open(os.path.join(corpus_dir, txt_file)) as file:
+                texts = file.readlines()
+            if not texts:
+                continue
+            self.txt_files.append(txt_file)
             self.total_line += len(texts)
-
-        self.LINE_PER_FILE = 10_000
+            self.cumulative_lines.append(self.total_line)
 
     def __len__(self):
         return self.total_line
 
     def __getitem__(self, idx):
-        subset_idx, line_idx = divmod(idx, self.LINE_PER_FILE)
-        with open(os.path.join(self.corpus_dir, f"subset_{subset_idx}.txt")) as file:
+        file_idx = bisect_right(self.cumulative_lines, idx)
+        previous_total = 0 if file_idx == 0 else self.cumulative_lines[file_idx - 1]
+        line_idx = idx - previous_total
+        with open(os.path.join(self.corpus_dir, self.txt_files[file_idx])) as file:
             subset = file.readlines()
         sentence = subset[line_idx]
         input_ids, labels = self.tokenizer(sentence)
