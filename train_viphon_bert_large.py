@@ -40,10 +40,10 @@ def set_seed(seed=42):
 
 set_seed(42)
 
-BS = 256
+BS = 8
 CHECKPOINT = args.checkpoint_path
 MODEL_NAME = args.model_name
-ACCUMULATION_STEPS = 8
+ACCUMULATION_STEPS = 256
 
 # Đổi thành True nếu muốn khôi phục và chạy tiếp từ checkpoint cũ sau khi bị ngắt quãng
 RESUME_FROM_CHECKPOINT = False 
@@ -55,6 +55,9 @@ local_rank = int(os.environ["LOCAL_RANK"])
 torch.cuda.set_device(local_rank)
 device = torch.device("cuda", local_rank)
 rank = dist.get_rank()
+world_size = dist.get_world_size()
+available_cpus = int(os.environ.get("SLURM_CPUS_PER_TASK") or len(os.sched_getaffinity(0)))
+num_workers = max(1, available_cpus // world_size)
 
 config = ViPhonBertConfig(
     hidden_size=768,
@@ -90,13 +93,14 @@ dataloader = DataLoader(
     dataset,
     batch_size=BS,
     sampler=sampler,
-    num_workers=24,
+    num_workers=num_workers,
     pin_memory=True,
     collate_fn=collate_fn,
     persistent_workers=True
 )
 
 model = ViPhonBert(config).to(device)
+model.bert.gradient_checkpointing_enable()
 model = DDP(
     model,
     device_ids=[local_rank],
@@ -161,6 +165,7 @@ if not os.path.isdir(CHECKPOINT):
     os.makedirs(CHECKPOINT, exist_ok=True)
 
 model.train()
+optimizer.zero_grad(set_to_none=True)
 done = False
 while True:
     total_loss = 0
@@ -178,8 +183,6 @@ while True:
         input_ids = batch['input_ids'].to(device)
         attention_mask = batch['attention_mask'].to(device)
         labels = batch['labels'].to(device)
-
-        optimizer.zero_grad(set_to_none=True)
 
         should_step = (batch_idx + 1) % ACCUMULATION_STEPS == 0
 
