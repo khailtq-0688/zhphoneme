@@ -27,6 +27,10 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--checkpoint_path", required=True, type=str)
 parser.add_argument("--model_name", default="viphon_bert_large", type=str)
 parser.add_argument("--corpus_dir", required=True, type=str)
+parser.add_argument("--batch_size", default=128, type=int)
+parser.add_argument("--accumulation_steps", default=16, type=int)
+parser.add_argument("--total_steps", default=3_000_000, type=int)
+parser.add_argument("--save_every", default=1000, type=int)
 args = parser.parse_args()
 
 def set_seed(seed=42):
@@ -40,10 +44,11 @@ def set_seed(seed=42):
 
 set_seed(42)
 
-BS = 8
+BS = args.batch_size
 CHECKPOINT = args.checkpoint_path
 MODEL_NAME = args.model_name
-ACCUMULATION_STEPS = 256
+ACCUMULATION_STEPS = args.accumulation_steps
+TRAIN_MAX_LENGTH = 2048
 
 # Đổi thành True nếu muốn khôi phục và chạy tiếp từ checkpoint cũ sau khi bị ngắt quãng
 RESUME_FROM_CHECKPOINT = False 
@@ -68,7 +73,6 @@ config = ViPhonBertConfig(
     hidden_dropout_prob=0.1,
     attention_probs_dropout_prob=0.1,
     max_position_embeddings=2048,
-    max_length=2048, # config for baidubaike pretrained corpus
     type_vocab_size=1,
     is_decoder=False,
     add_cross_attention = False
@@ -77,7 +81,7 @@ tokenizer = ViPhonTokenizer(config)
 dataset = ViPhonDataset(
     tokenizer=tokenizer, 
     corpus_dir=args.corpus_dir, 
-    max_length=config.max_length
+    max_length=TRAIN_MAX_LENGTH
 )
 
 g = torch.Generator()
@@ -109,7 +113,7 @@ model = DDP(
 )
 optimizer = torch.optim.AdamW(model.parameters(), lr=5e-5, weight_decay=0.01, betas=(0.9, 0.98), eps=1e-6)
 
-total_steps = 3_000_000
+total_steps = args.total_steps
 warmup_steps = int(total_steps * 0.01)
 
 if rank == 0:
@@ -122,7 +126,7 @@ if rank == 0:
             "hidden_size": config.hidden_size,
             "layers": config.num_hidden_layers,
             "heads": config.num_attention_heads,
-            "max_length": config.max_length,
+            "max_length": TRAIN_MAX_LENGTH,
             "warmup_steps": warmup_steps,
             "total_steps": total_steps,
         }
@@ -232,11 +236,11 @@ while True:
                 step=global_step
             )
         
-        if global_step > total_steps:
+        if global_step >= total_steps:
             done = True
             break
 
-        if global_step % 1000 == 0 and rank == 0:
+        if should_step and global_step % args.save_every == 0 and rank == 0:
             torch.save({
                 "epoch": start_epoch,  
                 "global_step": global_step,
