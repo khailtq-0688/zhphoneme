@@ -104,7 +104,7 @@ dataloader = DataLoader(
 )
 
 model = ViPhonBert(config).to(device)
-model.bert.gradient_checkpointing_enable()
+model.bert.gradient_checkpointing_enable({"use_reentrant": False})
 model = DDP(
     model,
     device_ids=[local_rank],
@@ -131,7 +131,6 @@ if rank == 0:
             "total_steps": total_steps,
         }
     )
-    wandb.config.update(vars(config))
 
 def lr_lambda(current_step):
     if current_step < warmup_steps:
