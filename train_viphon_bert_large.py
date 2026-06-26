@@ -171,8 +171,10 @@ while True:
     else:
         progress_bar = dataloader
 
-    batch_idx = global_batch
-    for batch in progress_bar[global_batch:]:
+    for batch_idx, batch in enumerate(progress_bar):
+        if batch_idx < global_batch:
+            continue
+
         input_ids = batch['input_ids'].to(device)
         attention_mask = batch['attention_mask'].to(device)
         labels = batch['labels'].to(device)
@@ -208,14 +210,15 @@ while True:
         loss_value = loss.detach()
         loss_value *= ACCUMULATION_STEPS
         dist.all_reduce(loss_value, op=dist.ReduceOp.SUM)
-        loss_value /= dist.get_world_size().item()
+        loss_value /= dist.get_world_size()
         
         total_loss += loss_value
-        progress_bar.set_postfix({
-            'loss': f"{loss_value:.4f}",
-            'step': global_step,
-            'lr': f"{lr_scheduler.get_last_lr()[0]:.2e}"
-        })
+        if rank == 0:
+            progress_bar.set_postfix({
+                'loss': f"{loss_value:.4f}",
+                'step': global_step,
+                'lr': f"{lr_scheduler.get_last_lr()[0]:.2e}"
+            })
 
         if rank == 0:
             wandb.log(
@@ -240,8 +243,6 @@ while True:
                 "scaler_state_dict": scaler.state_dict()
             }, checkpoint_path)
             model.module.save_pretrained(os.path.join(CHECKPOINT, f"{MODEL_NAME}"))
-
-        batch_idx += 1
 
     if rank == 0:
         torch.save({
