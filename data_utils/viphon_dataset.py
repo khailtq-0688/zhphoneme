@@ -76,6 +76,8 @@ class ViPhonDataset(Dataset):
             subset = file.readlines()
         sentence = subset[line_idx]
         input_ids, labels = self.tokenizer(sentence)
+        input_ids = input_ids[:self.max_length]
+        labels = labels[:self.max_length]
         total_sampling = 5
                 
         for i in range(total_sampling):

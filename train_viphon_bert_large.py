@@ -1,7 +1,8 @@
 import torch
 import numpy as np
 import random
-from torch.utils.data import DataLoader
+from itertools import islice
+from torch.utils.data import DataLoader, Sampler
 from torch.optim.lr_scheduler import LambdaLR
 
 import torch.distributed as dist
@@ -44,6 +45,21 @@ def set_seed(seed=42):
 
 set_seed(42)
 
+class SkipBatchSampler(Sampler):
+    def __init__(self, sampler, batch_size):
+        self.sampler = sampler
+        self.batch_size = batch_size
+        self.skip_batches = 0
+
+    def __iter__(self):
+        return islice(iter(self.sampler), self.skip_batches * self.batch_size, None)
+
+    def __len__(self):
+        return max(0, len(self.sampler) - self.skip_batches * self.batch_size)
+
+    def set_epoch(self, epoch):
+        self.sampler.set_epoch(epoch)
+
 BS = args.batch_size
 CHECKPOINT = args.checkpoint_path
 MODEL_NAME = args.model_name
@@ -51,7 +67,7 @@ ACCUMULATION_STEPS = args.accumulation_steps
 TRAIN_MAX_LENGTH = 2048
 
 # Đổi thành True nếu muốn khôi phục và chạy tiếp từ checkpoint cũ sau khi bị ngắt quãng
-RESUME_FROM_CHECKPOINT = False 
+RESUME_FROM_CHECKPOINT = True 
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -87,11 +103,11 @@ dataset = ViPhonDataset(
 g = torch.Generator()
 g.manual_seed(42)
 
-sampler = DistributedSampler(
+sampler = SkipBatchSampler(DistributedSampler(
     dataset,
     shuffle=False,
     seed=42,
-)
+), BS)
 
 dataloader = DataLoader(
     dataset,
@@ -111,7 +127,7 @@ model = DDP(
     output_device=local_rank,
     find_unused_parameters=False
 )
-optimizer = torch.optim.AdamW(model.parameters(), lr=5e-5, weight_decay=0.01, betas=(0.9, 0.98), eps=1e-6)
+optimizer = torch.optim.AdamW(model.parameters(), lr=5e-5, weight_decay=0.01, betas=(0.9, 0.999), eps=1e-6)
 
 total_steps = args.total_steps
 warmup_steps = int(total_steps * 0.01)
@@ -143,6 +159,7 @@ scaler = torch.amp.GradScaler('cuda')
 start_epoch = 1
 global_step = 0
 global_batch = 0
+resume_batch_offset = 0
 checkpoint_path = os.path.join(CHECKPOINT, f"{MODEL_NAME}_training.pth")
 
 if RESUME_FROM_CHECKPOINT and os.path.isfile(checkpoint_path):
@@ -151,14 +168,16 @@ if RESUME_FROM_CHECKPOINT and os.path.isfile(checkpoint_path):
     
     start_epoch = checkpoint["epoch"]
     global_step = checkpoint["global_step"]
-    global_batch = checkpoint["global_batch"]
+    global_batch = checkpoint.get("global_batch", min(global_step * ACCUMULATION_STEPS, len(dataloader)))
+    resume_batch_offset = global_batch
+    sampler.skip_batches = resume_batch_offset
     model.module.load_state_dict(checkpoint["model_state_dict"])
     optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
     lr_scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
     scaler.load_state_dict(checkpoint["scaler_state_dict"])
     
     lr_scheduler.last_epoch = global_step
-    print(f"=> Khôi phục thành công! Tiếp tục train từ Epoch {start_epoch}, Step tổng {global_step}")
+    print(f"=> Khôi phục thành công! Tiếp tục train từ Epoch {start_epoch}, Step tổng {global_step}, Batch {global_batch}")
 else:
     print(f"=> Không kích hoạt resume hoặc không tìm thấy file. Bắt đầu pre-train mới từ đầu.")
 
@@ -179,15 +198,15 @@ while True:
     else:
         progress_bar = dataloader
 
+    full_batch_idx = resume_batch_offset - 1
     for batch_idx, batch in enumerate(progress_bar):
-        if batch_idx < global_batch:
-            continue
+        full_batch_idx = resume_batch_offset + batch_idx
 
         input_ids = batch['input_ids'].to(device)
         attention_mask = batch['attention_mask'].to(device)
         labels = batch['labels'].to(device)
 
-        should_step = (batch_idx + 1) % ACCUMULATION_STEPS == 0
+        should_step = (full_batch_idx + 1) % ACCUMULATION_STEPS == 0
 
         context = (
             model.no_sync()
@@ -243,6 +262,7 @@ while True:
             torch.save({
                 "epoch": start_epoch,  
                 "global_step": global_step,
+                "global_batch": full_batch_idx + 1,
                 "model_state_dict": model.module.state_dict(),
                 "optimizer_state_dict": optimizer.state_dict(),
                 "scheduler_state_dict": lr_scheduler.state_dict(),
@@ -254,6 +274,7 @@ while True:
         torch.save({
                 "epoch": start_epoch,  
                 "global_step": global_step,
+                "global_batch": full_batch_idx + 1,
                 "model_state_dict": model.module.state_dict(),
                 "optimizer_state_dict": optimizer.state_dict(),
                 "scheduler_state_dict": lr_scheduler.state_dict(),
@@ -268,6 +289,9 @@ while True:
     if done:
         break
     
+    global_batch = 0
+    resume_batch_offset = 0
+    sampler.skip_batches = 0
     start_epoch += 1
 
 dist.barrier()
