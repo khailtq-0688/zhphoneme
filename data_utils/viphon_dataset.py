@@ -53,34 +53,30 @@ class ViPhonDataset(Dataset):
         self.corpus_dir = corpus_dir
         self.tokenizer = tokenizer
         txt_files = sorted(os.listdir(corpus_dir), key=_subset_sort_key)
-        # self.txt_files = []
-        # self.total_line = 0
-        # self.cumulative_lines = []
-        self.corpus = []
+        self.txt_files = []
+        self.total_line = 0
+        self.cumulative_lines = []
         for txt_file in tqdm(txt_files, desc="Loading corpus"):
             with open(os.path.join(corpus_dir, txt_file)) as file:
                 texts = file.readlines()
             if not texts:
                 continue
-            # self.txt_files.append(txt_file)
-            # self.total_line += len(texts)
-            # self.cumulative_lines.append(self.total_line)
-            self.corpus.extend(texts)
+            self.txt_files.append(txt_file)
+            self.total_line += len(texts)
+            self.cumulative_lines.append(self.total_line)
 
     def __len__(self):
         # return self.total_line
         return len(self.corpus)
 
     def __getitem__(self, idx):
-        # file_idx = bisect_right(self.cumulative_lines, idx)
-        # previous_total = 0 if file_idx == 0 else self.cumulative_lines[file_idx - 1]
-        # line_idx = idx - previous_total
-        # with open(os.path.join(self.corpus_dir, self.txt_files[file_idx])) as file:
-        #     subset = file.readlines()
-        # sentence = subset[line_idx]
-        sentence = self.corpus[idx]
+        file_idx = bisect_right(self.cumulative_lines, idx)
+        previous_total = 0 if file_idx == 0 else self.cumulative_lines[file_idx - 1]
+        line_idx = idx - previous_total
+        with open(os.path.join(self.corpus_dir, self.txt_files[file_idx])) as file:
+            subset = file.readlines()
+        sentence = subset[line_idx]
         input_ids, labels = self.tokenizer(sentence)
-        range_ids = range(len(self.corpus))
         input_ids = input_ids[:self.max_length]
         labels = labels[:self.max_length]
         total_sampling = 5
@@ -90,9 +86,7 @@ class ViPhonDataset(Dataset):
             if np.random.binomial(1, 0.5) == 1:
                 continue
 
-            # random_sentence = random.choice(subset)
-            random_idx = random.choice(range_ids)
-            random_sentence = self.corpus[random_idx]
+            random_sentence = random.choice(subset)
             random_input_ids, random_labels = self.tokenizer(random_sentence)
 
             # ignore the <cls> token
