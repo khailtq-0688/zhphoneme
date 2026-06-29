@@ -13,7 +13,7 @@ class ViPhonBertConfig(PretrainedConfig):
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
         max_position_embeddings=512,
-        max_length=4096,
+        max_length=512,
         type_vocab_size=1,
         initializer_range=0.02,
         layer_norm_eps=1e-12,

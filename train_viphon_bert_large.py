@@ -60,11 +60,32 @@ class SkipBatchSampler(Sampler):
     def set_epoch(self, epoch):
         self.sampler.set_epoch(epoch)
 
+def _fit_state_dict_shapes(state_dict, target_state_dict):
+    for key, value in list(state_dict.items()):
+        target = target_state_dict.get(key)
+        if target is None or not torch.is_tensor(value) or value.shape == target.shape:
+            continue
+        if value.ndim == target.ndim and all(old >= new for old, new in zip(value.shape, target.shape)):
+            state_dict[key] = value[tuple(slice(0, size) for size in target.shape)].clone()
+
+def _fit_optimizer_state_shapes(optimizer):
+    for param, state in optimizer.state.items():
+        for key, value in list(state.items()):
+            if not torch.is_tensor(value) or value.ndim == 0:
+                continue
+            if value.shape == param.shape:
+                continue
+            if value.ndim == param.ndim and all(old >= new for old, new in zip(value.shape, param.shape)):
+                state[key] = value[tuple(slice(0, size) for size in param.shape)].clone()
+            else:
+                state.clear()
+                break
+
 BS = args.batch_size
 CHECKPOINT = args.checkpoint_path
 MODEL_NAME = args.model_name
 ACCUMULATION_STEPS = args.accumulation_steps
-TRAIN_MAX_LENGTH = 2048
+TRAIN_MAX_LENGTH = 512
 
 # Đổi thành True nếu muốn khôi phục và chạy tiếp từ checkpoint cũ sau khi bị ngắt quãng
 RESUME_FROM_CHECKPOINT = True 
@@ -88,7 +109,8 @@ config = ViPhonBertConfig(
     hidden_act="gelu",
     hidden_dropout_prob=0.1,
     attention_probs_dropout_prob=0.1,
-    max_position_embeddings=2048,
+    max_position_embeddings=TRAIN_MAX_LENGTH,
+    max_length=TRAIN_MAX_LENGTH,
     type_vocab_size=1,
     is_decoder=False,
     add_cross_attention = False
@@ -171,8 +193,11 @@ if RESUME_FROM_CHECKPOINT and os.path.isfile(checkpoint_path):
     global_batch = checkpoint.get("global_batch", min(global_step * ACCUMULATION_STEPS, len(dataloader)))
     resume_batch_offset = global_batch
     sampler.skip_batches = resume_batch_offset
-    model.module.load_state_dict(checkpoint["model_state_dict"])
+    model_state_dict = checkpoint["model_state_dict"]
+    _fit_state_dict_shapes(model_state_dict, model.module.state_dict())
+    model.module.load_state_dict(model_state_dict)
     optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+    _fit_optimizer_state_shapes(optimizer)
     lr_scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
     scaler.load_state_dict(checkpoint["scaler_state_dict"])
     
@@ -226,11 +251,14 @@ while True:
         scaler.scale(loss).backward()
         
         if should_step:
+            old_scale = scaler.get_scale()
             scaler.step(optimizer)
             scaler.update()
+            optimizer_stepped = scaler.get_scale() >= old_scale
             optimizer.zero_grad(set_to_none=True)
-            lr_scheduler.step()
-            global_step += 1
+            if optimizer_stepped:
+                lr_scheduler.step()
+                global_step += 1
 
         loss_value = loss.detach()
         loss_value *= ACCUMULATION_STEPS

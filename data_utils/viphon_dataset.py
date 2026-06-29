@@ -80,9 +80,9 @@ class ViPhonDataset(Dataset):
         # sentence = subset[line_idx]
         sentence = self.corpus[idx]
         input_ids, labels = self.tokenizer(sentence)
-        range_ids = list(range_ids)
-        # input_ids = input_ids[:self.max_length]
-        # labels = labels[:self.max_length]
+        range_ids = range(len(self.corpus))
+        input_ids = input_ids[:self.max_length]
+        labels = labels[:self.max_length]
         total_sampling = 5
                 
         for i in range(total_sampling):
