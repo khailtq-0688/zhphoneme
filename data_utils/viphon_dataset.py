@@ -56,6 +56,8 @@ class ViPhonDataset(Dataset):
         self.txt_files = []
         self.total_line = 0
         self.cumulative_lines = []
+        self._cached_file_idx = None
+        self._cached_subset = None
         for txt_file in tqdm(txt_files, desc="Loading corpus"):
             with open(os.path.join(corpus_dir, txt_file)) as file:
                 texts = file.readlines()
@@ -66,15 +68,20 @@ class ViPhonDataset(Dataset):
             self.cumulative_lines.append(self.total_line)
 
     def __len__(self):
-        # return self.total_line
-        return len(self.corpus)
+        return self.total_line
+
+    def _load_subset(self, file_idx):
+        if self._cached_file_idx != file_idx:
+            with open(os.path.join(self.corpus_dir, self.txt_files[file_idx])) as file:
+                self._cached_subset = file.readlines()
+            self._cached_file_idx = file_idx
+        return self._cached_subset
 
     def __getitem__(self, idx):
         file_idx = bisect_right(self.cumulative_lines, idx)
         previous_total = 0 if file_idx == 0 else self.cumulative_lines[file_idx - 1]
         line_idx = idx - previous_total
-        with open(os.path.join(self.corpus_dir, self.txt_files[file_idx])) as file:
-            subset = file.readlines()
+        subset = self._load_subset(file_idx)
         sentence = subset[line_idx]
         input_ids, labels = self.tokenizer(sentence)
         input_ids = input_ids[:self.max_length]
