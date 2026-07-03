@@ -102,10 +102,10 @@ available_cpus = int(os.environ.get("SLURM_CPUS_PER_TASK") or len(os.sched_getaf
 num_workers = max(1, available_cpus // world_size)
 
 config = ViPhonBertConfig(
-    hidden_size=768,
-    num_hidden_layers=12,
-    num_attention_heads=12,
-    intermediate_size=3072,
+    hidden_size=1024,
+    num_hidden_layers=24,
+    num_attention_heads=16,
+    intermediate_size=4096,
     hidden_act="gelu",
     hidden_dropout_prob=0.1,
     attention_probs_dropout_prob=0.1,
