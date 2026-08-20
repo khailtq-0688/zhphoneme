@@ -19,6 +19,7 @@ from data_utils.viphon_dataset import collate_fn
 from tqdm import tqdm
 import os
 import argparse
+import shutil
 import wandb
 
 torch.backends.cuda.matmul.allow_tf32 = True
@@ -32,6 +33,7 @@ parser.add_argument("--batch_size", default=128, type=int)
 parser.add_argument("--accumulation_steps", default=16, type=int)
 parser.add_argument("--total_steps", default=3_000_000, type=int)
 parser.add_argument("--save_every", default=1000, type=int)
+parser.add_argument("--persistent_checkpoint_path", default=None, type=str)
 args = parser.parse_args()
 
 def set_seed(seed=42):
@@ -80,6 +82,24 @@ def _fit_optimizer_state_shapes(optimizer):
             else:
                 state.clear()
                 break
+
+def _save_checkpoint(state, path):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp_path = f"{path}.tmp"
+    torch.save(state, tmp_path)
+    os.replace(tmp_path, path)
+
+def _copy_checkpoint(src_path, dst_dir):
+    if not dst_dir:
+        return
+    os.makedirs(dst_dir, exist_ok=True)
+    dst_path = os.path.join(dst_dir, os.path.basename(src_path))
+    if os.path.abspath(src_path) == os.path.abspath(dst_path):
+        return
+    tmp_path = f"{dst_path}.tmp"
+    shutil.copy2(src_path, tmp_path)
+    os.replace(tmp_path, dst_path)
+    print(f"=> Synced checkpoint to persistent path: {dst_path}", flush=True)
 
 BS = args.batch_size
 CHECKPOINT = args.checkpoint_path
@@ -250,6 +270,7 @@ while True:
         
         scaler.scale(loss).backward()
         
+        optimizer_stepped = False
         if should_step:
             old_scale = scaler.get_scale()
             scaler.step(optimizer)
@@ -282,12 +303,8 @@ while True:
                 step=global_step
             )
         
-        if global_step >= total_steps:
-            done = True
-            break
-
-        if should_step and global_step % args.save_every == 0 and rank == 0:
-            torch.save({
+        if optimizer_stepped and global_step % args.save_every == 0 and rank == 0:
+            _save_checkpoint({
                 "epoch": start_epoch,  
                 "global_step": global_step,
                 "global_batch": full_batch_idx + 1,
@@ -296,7 +313,12 @@ while True:
                 "scheduler_state_dict": lr_scheduler.state_dict(),
                 "scaler_state_dict": scaler.state_dict()
             }, checkpoint_path)
+            _copy_checkpoint(checkpoint_path, args.persistent_checkpoint_path)
             model.module.save_pretrained(os.path.join(CHECKPOINT, f"{MODEL_NAME}"))
+
+        if global_step >= total_steps:
+            done = True
+            break
 
     if rank == 0:
         torch.save({
