@@ -3,6 +3,7 @@ import torch
 from configs.segment_free_bert_config import SegmentFreeBertConfig
 from .viphon_tokenizer import VietnameseEncodedTokens
 from .Vietnamese_utils import is_Vietnamese
+from .masking import create_roberta_mlm_labels
 
 import re
 from typing import *
@@ -18,29 +19,7 @@ class SegmentFreeTokenizer:
         return mask
 
     def create_labels(self, input_ids: torch.Tensor):
-        # RoBERTa/BERT dynamic masking: 15% of non-special tokens are selected; of those,
-        # 80% become <mask>, 10% become a random vocab token, and 10% are left unchanged
-        # (but still count towards the loss, since the model must still predict them).
-        labels = input_ids.clone()
-
-        special_ids = torch.tensor(self.config.special_ids, device=input_ids.device)
-        special_tokens_mask = torch.isin(input_ids, special_ids)
-
-        probability_matrix = torch.full(labels.shape, 0.15)
-        probability_matrix.masked_fill_(special_tokens_mask, value=0.0)
-        masked_indices = torch.bernoulli(probability_matrix).bool()
-        labels[~masked_indices] = -100
-
-        indices_replaced = torch.bernoulli(torch.full(labels.shape, 0.8)).bool() & masked_indices
-        input_ids[indices_replaced] = self.config.mask_token_id
-
-        indices_random = torch.bernoulli(torch.full(labels.shape, 0.5)).bool() & masked_indices & ~indices_replaced
-        random_ids = torch.randint(self.config.vocab_size, labels.shape, dtype=torch.long)
-        input_ids[indices_random] = random_ids[indices_random]
-
-        # the remaining 10% of masked_indices are left unchanged in input_ids
-
-        return input_ids, labels
+        return create_roberta_mlm_labels(input_ids, self.config)
 
     def normalize(self, text: str):
         text = text.lower()
@@ -62,9 +41,14 @@ class SegmentFreeTokenizer:
 
         return text
 
-    def encode(self, sentence: str) -> torch.Tensor:
+    def encode_ids(self, sentence: str) -> list[int]:
+        """Tokenize one sentence into vocab ids, without the leading <cls> or any
+        truncation. Used directly by SegmentFreeDataset to pack several sentences into
+        one training example (RoBERTa-style FULL-SENTENCES); encode() below is the
+        single-sentence convenience wrapper built on top of it.
+        """
         sentence = self.normalize(sentence)
-        token_ids = [self.config.cls_token_id]
+        token_ids = []
         for word in sentence.split():
             is_vietnamese, _ = is_Vietnamese(word)
             if is_vietnamese:
@@ -77,6 +61,10 @@ class SegmentFreeTokenizer:
                 for char in word:
                     token_ids.append(self.config.label2id.get(char, self.config.unk_token_id))
 
+        return token_ids
+
+    def encode(self, sentence: str) -> torch.Tensor:
+        token_ids = [self.config.cls_token_id] + self.encode_ids(sentence)
         vec = torch.tensor(token_ids).long()
         # truncate the input
         vec = vec[:self.config.max_length]
