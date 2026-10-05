@@ -56,6 +56,39 @@ def build_backbone_config(config: SegmentFreeBertConfig) -> XLMRobertaConfig:
         mask_token_id=config.mask_token_id,
     )
 
+def build_scratch_backbone_config(config) -> XLMRobertaConfig:
+    """Same as build_backbone_config, but for a model with no pretrained checkpoint to
+    match shapes with (SegmentFreeBertScratch, SegmentFreeBertUnigram): uses the given
+    config's own max_position_embeddings/layer_norm_eps directly instead of pinning them
+    to XLM-R-base's values. RobertaEmbeddings assigns position ids in
+    [pad_token_id+1, pad_token_id+seq_len] for a fully-packed, non-padded sequence (see
+    create_position_ids_from_input_ids), so the position-embedding table needs at least
+    pad_token_id + max_length + 1 rows -- this is why XLM-R-base itself uses 514 rather
+    than 512. A config's own max_position_embeddings (512 by default, same as
+    max_length) is one short of that and would index out of bounds on a fully-packed
+    example, so the larger of the two is used here.
+    """
+    max_position_embeddings = max(config.max_position_embeddings, config.pad_token_id + config.max_length + 1)
+
+    return XLMRobertaConfig(
+        vocab_size=config.vocab_size,
+        hidden_size=config.hidden_size,
+        num_hidden_layers=config.num_hidden_layers,
+        num_attention_heads=config.num_attention_heads,
+        intermediate_size=config.intermediate_size,
+        hidden_act=config.hidden_act,
+        hidden_dropout_prob=config.hidden_dropout_prob,
+        attention_probs_dropout_prob=config.attention_probs_dropout_prob,
+        max_position_embeddings=max_position_embeddings,
+        type_vocab_size=config.type_vocab_size,
+        initializer_range=config.initializer_range,
+        layer_norm_eps=config.layer_norm_eps,
+        position_embedding_type=config.position_embedding_type,
+        pad_token_id=config.pad_token_id,
+        bos_token_id=config.cls_token_id,
+        mask_token_id=config.mask_token_id,
+    )
+
 class GroupAttentionMasks(NamedTuple):
     """Constant, data-independent tensors GroupAttention needs, all shaped only by
     seq_len. Building these is O(seq_len^2) (or O(seq_len) for the band indices), so
@@ -225,7 +258,36 @@ class SegmentFreeRobertaModel(nn.Module):
         hidden_states, break_probs = self.encoder(hidden_states, extended_mask, valid_mask)
         return hidden_states, break_probs
 
-class SegmentFreeBert(PreTrainedModel):
+class SegmentFreeBertBase(PreTrainedModel):
+    """Shared weight-init and forward pass for every SegmentFreeBERT variant (XLM-R-
+    initialized, from-scratch, Unigram-vocab, ...): they all wrap a
+    SegmentFreeRobertaModel + RobertaLMHead the same way and only differ in how the
+    backbone config is built and whether pretrained weights get transferred into it, so
+    each subclass only needs to implement __init__."""
+
+    @torch.no_grad()
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, RobertaLMHead):
+            nn.init.zeros_(module.bias)
+        elif isinstance(module, RobertaEmbeddings):
+            module.position_ids.copy_(torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
+            module.token_type_ids.zero_()
+
+    def forward(self, input_ids, attention_mask=None, labels=None):
+        if attention_mask is None:
+            attention_mask = torch.ones_like(input_ids)
+
+        sequence_output, break_probs = self.roberta(input_ids, attention_mask)
+        logits = self.lm_head(sequence_output)
+
+        loss = None
+        if labels is not None:
+            loss = self.loss_fn(logits.view(-1, self.config.vocab_size), labels.view(-1))
+
+        return {"loss": loss, "logits": logits, "break_probs": break_probs}
+
+class SegmentFreeBert(SegmentFreeBertBase):
     config_class = SegmentFreeBertConfig
 
     def __init__(self, config: SegmentFreeBertConfig):
@@ -240,15 +302,6 @@ class SegmentFreeBert(PreTrainedModel):
 
         self.post_init()
 
-    @torch.no_grad()
-    def _init_weights(self, module):
-        super()._init_weights(module)
-        if isinstance(module, RobertaLMHead):
-            nn.init.zeros_(module.bias)
-        elif isinstance(module, RobertaEmbeddings):
-            module.position_ids.copy_(torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
-            module.token_type_ids.zero_()
-
     def load_xlm_roberta_backbone(self, pretrained_model_name: str = PRETRAINED_MODEL_NAME):
         """Copy every XLM-RoBERTa-base weight except the vocabulary-sized embedding and MLM
         head (kept random for SegmentFreeBERT's own vocabulary) and the GroupAttention
@@ -262,16 +315,3 @@ class SegmentFreeBert(PreTrainedModel):
             own_state[key] = tensor
         self.load_state_dict(own_state)
         return self
-
-    def forward(self, input_ids, attention_mask=None, labels=None):
-        if attention_mask is None:
-            attention_mask = torch.ones_like(input_ids)
-
-        sequence_output, break_probs = self.roberta(input_ids, attention_mask)
-        logits = self.lm_head(sequence_output)
-
-        loss = None
-        if labels is not None:
-            loss = self.loss_fn(logits.view(-1, self.config.vocab_size), labels.view(-1))
-
-        return {"loss": loss, "logits": logits, "break_probs": break_probs}
